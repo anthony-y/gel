@@ -1,0 +1,2 @@
+func Printf(fmt [u8]) -> s32 {}
+

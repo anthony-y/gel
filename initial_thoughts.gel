@@ -1,0 +1,236 @@
+#import "io"
+#import "mem" mem
+#import strict "compiler" compiler
+
+// You can just override the panic function with whatever you want
+#panic func(e error) {
+    PrintTo(io.stderr, e.message)
+}
+
+/*
+Integer types can cast to larger ones
+Pointer types can cast to size
+*/
+coercion (from s64) -> int => byte_cast(int, from)
+
+// Not sure what errors will look like yet
+
+error Memory_Error {
+    OutOfMemory,
+    DoubleFree,
+    ReadError // type_of(Memory_Errors.ReadError) == error
+}
+
+struct error {
+    message string
+    code    int
+}
+
+enum ErrorCode(int) coerce {
+    Error,
+}
+
+coercion (from string) => error.{message=from, code=ErrorCode.Error}
+
+// Variants can only accept types as parameters
+// Structs can accept any values.
+// They will be stored in their declarations' constants storage
+// 
+// Putting a '#' before the typename indicates that it must be known at compile-time.
+// 
+// In fact, for variants, it is acceptable to emit the typename entirely, since it is guaranteed to be 'type'
+// 
+// In function parameters, or at local scope are really the only contexts
+// where this wouldn't be implicit.
+// 
+variant Optional (T) {
+    None,
+    Some(T),
+}
+
+variant Result (V #type) {
+    Ok(V),
+    Err(error),
+}
+
+// Receives implicit value (in this case called `lhs`)
+using lhs Optional(T) for func Unwrap() -> T {
+    match lhs {
+        Some(T) => return T
+        None    => panic("Attempt to Unwrap None value")
+    }
+}
+
+using lhs Result(V) for func Try() -> T {
+    match lhs {
+        Ok(v)  => return v
+        Err(e) => panic(e)
+    }
+}
+
+func main () -> Optional(error) {
+    // JavaScript style property-extraction
+    // If `msg` were not enclosed in "{}", it's type would be `Payload`
+    // Maybe give a compiler warning if you're discarding too much memory
+    const {msg} string = GetMessage()
+    Print(msg)
+
+    // Inferring type given to `Some` from lhs's polymorph subtype
+    let v Optional(Payload) = Some({"Hello other message", 32})
+    defer v.Unwrap().Print()
+
+    // error: not enough information to infer polymorph type
+    let v2 = None
+
+    // Array
+    const array [10;int]
+    array.1 = 12
+    Print(array.0, array.1)
+
+    // Dynamic array
+    let list [heap; int]
+    list = Append(list, 100)
+
+    // View
+    const view [int] = array3[1:4]
+
+    return None
+}
+
+func DeepCopy(T #type, what T) -> T {
+
+    const info = type_info(T)
+    
+    if info.is_primitive then return what
+
+    const v T
+
+    if info.tag == .STRUCT {
+        const s Type_Info_Struct = cast(info, Type_Info_Struct)
+        loop s.fields using field {
+            const this_field = #field_offset_ptr(v, field.offset)
+            const that_field = #field_offset_ptr(what, field.offset)
+            @this_field = @that_field
+        }
+    }
+
+    return v
+}
+
+func Append(T #type, a [T], item T, error_handler Optional(Error_Handler)) -> [T] {
+    let arr = a
+
+    match MaybeGrowArray(*arr) {
+        Ok(ptr)  => break
+        Err(err) => panic(err)
+    }
+
+    arr.data.(arr.length) = item
+    arr.length += 1
+
+    return arr
+}
+
+// 32-bit view of a block of `T`
+struct View (T #type, N #int) {
+    data   *T
+    length  u32 = N
+}
+
+// T should be able to be inferred from the types of other arguments depending on it.
+// If there are multiple dependencies on `T`, and they do not all match, we will have to throw an error.
+func View(T #type, array [T], start, end u32) -> View(T) {
+   const v View(T)
+   v.data = array.data
+   v.length = end-start
+   return v
+}
+
+// T can be inferred here
+using self View(T) for func ToArray() -> [T] {
+    const a [T]
+    a.data = data
+    a.length = length
+    return a
+}
+
+struct Payload {
+    msg string
+    n   int
+}
+
+coerce (from Payload) -> int => from.n
+
+using Payload for func Print() {
+    Printf("%d %s", n, msg)
+}
+
+using lhs Payload for func Init() -> Payload {
+    n += 1
+    return lhs
+}
+
+// Explicit shorthand - return type is explicit and return values initializer type is inferred
+func GetMessage() -> Payload => .{"Hello world", 12}
+
+// Implicit shorthand - return type is inferred from the return expression
+func GetMessage() => Payload.{"Hello world", 12}
+
+
+func PointlessAllocation(T #type) -> Output Result(*T) {
+
+    const N = 64
+
+    // Use it in other declarations
+    // Call type_info on it, and get metadata about it.
+    const Int type = type_of(N);
+
+    // Error: Int creates a type, but it's not a compile-time constant
+    const Z Int = 10
+
+    // Likewise, here, because `T` is not compile-time, this will generate an error.
+    // To fix it, prefix typename of `T` with '#' 
+    let result Output
+
+    const ctx = context
+
+    // ctx.allocator will be reset to its previous value at the end of the scope
+    // with ctx pushes this modified context for the duration of the scope
+    using ctx.allocator = mem.LinearAllocator; with ctx {
+        match temp = Allocate(T*N) {
+            Err(err) => return Err(err)
+            Ok(ptr)  => result = temp
+        }
+    }
+
+    // loop 0 to N using i 
+    loop i = 0; < N {
+        const n = (#no_bounds_check result + i)
+        Print(@n)
+    }
+    
+    return result
+}
+
+func Allocate(n size) -> Optional([byte]) {
+    const data = cast libc.Malloc(size) to *byte
+    if data == 0 then return None
+    return Some(.{.data=data, .length=n})
+}
+
+const LibC = #dynamic_link "libc"
+
+func Printf(fmt *u8, args [any]) -> int     #extern LibC "printf"
+func Malloc(size usize)          -> raw_ptr #extern LibC "malloc"
+func Free(ptr raw_ptr)                      #extern LibC "free"
+
+func Print(#var_args args [any]) {
+    loop args with it {
+        match type_info(args).tag {
+            .INTEGER => Printf("%ld", cast(ssize)it)
+            .STRING  => Printf("%s", cast(string)it)
+            // error rest aren't covered
+        }
+    }
+}
+

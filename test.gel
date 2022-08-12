@@ -1,0 +1,23 @@
+#import("libc")
+
+let arr [heap; int]
+
+func C(from #string) -> [from.length+1; u8] {
+
+    PushAllocator(temporary_allocator)
+
+    match cstr = Allocate(from.length+1) {
+        Ok       => CopyBytes(from.length, from.data, cstr)
+        Err(err) => panic(err)
+    }
+
+    cstr.(from.length) = 0
+}
+
+func main(args [[u8]]) -> Optional(error) {
+    libc.Printf(C("%s"), args.0)
+    return None
+}
+
+// TODO selector should not be postfix expression
+// #import("dev").Assert(main() == three, "unreachable")
