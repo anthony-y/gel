@@ -8,7 +8,8 @@
 
 using TypeHandle = int;
 using TypedDeclHandle = int;
-using TypedFileHandle = int; 
+using TypedFileHandle = int;
+using ScopeHandle = int;
 
 enum TypeTag {
     TYPE_PRIMITIVE_INT,
@@ -48,9 +49,13 @@ struct Type {
     TypeMetadata *metadata;
 };
 
+struct TypedExpr {
+
+};
+
 struct Scope {
     ScopeHandle self;
-    Array<TypedStatement> statements;
+    Array<TypedExpr> things;
 };
 
 template<typename T> struct Typed {
