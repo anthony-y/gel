@@ -8,11 +8,11 @@ The compiler applies data-oriented design to maximise speed and simplify abstrac
 
 ### Lexical analysis
 
-Functionally complete
+Work in progress
 
 ### Parsing
 
-Functionally complete
+Work in progress
 
 ### Typing and symbols
 

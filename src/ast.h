@@ -47,6 +47,7 @@ enum UntypedExprTag {
     EXPR_ARRAY_TYPE,
     EXPR_DIRECTIVE,
     EXPR_MATCH,
+    EXPR_IF,
     EXPR_PARENS,
 };
 
