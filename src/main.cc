@@ -11,25 +11,10 @@
 #include "semantics.h"
 #include "table.h"
 
-#define DEBUG_MODE 0
-
 static Result<Buffer> read_entire_file(const u8 *path);
 
-template<typename T> static void copy_to_flat_array_and_free_buckets(BucketArray<T> array, Array<T> *out_flat) {
-    
-    array_init(out_flat, array.length * BucketArray<T>::BUCKET_MAX_ITEMS);
-
-    auto next = array.first_bucket;
-    while (next) {
-        auto current = next;
-        for (u64 i = 0; i < current->length; i++) {
-            T data = current->items[i];
-            out_flat->data[out_flat->length++] = data;
-        }
-        next = current->next_bucket;
-        free(current);
-    }
-}
+// TODO move to arrays.h probably (would require refactor)
+template<typename T> static void copy_to_flat_array_and_free_buckets(BucketArray<T> array, Array<T> *out_flat);
 
 Buffer copy_token_string(TokenData t) {
     u8 *data = (u8 *)malloc(t.length+1);
@@ -44,6 +29,9 @@ Buffer copy_string(const u8 *t) {
     return { .data = data, .length = length };
 }
 
+// Recursively perform lexical analysis and parsing on a file and all its dependencies.
+// Resulting UntypedFile data will populate `all_untyped_files`.
+//
 int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
 
     auto maybe_file_data = read_entire_file(file_path);
@@ -56,7 +44,9 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
     Array<TokenData> flat;
     bucket_array_init(&tokens);
 
-    if (!do_lexical_analysis(file_data, &tokens)) {
+    int lexing_error_count = do_lexical_analysis(file_data, &tokens);
+    if (lexing_error_count > 0) {
+        fprintf(stderr, "gel: There were %d errors, exiting.", lexing_error_count);
         return -1;
     }
 
@@ -67,16 +57,22 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
     if (success < 0)
         return -1;
 
+    // The first element in this array is guaranteed to be the very top-level scope for each file.
     UntypedCode top_level = ast[0];
 
+    // We'll iterate all the directive expressions at the top-level.
     for (int i = 0; i < top_level.top_directives.length; i++) {
+
         UntypedExpr d = top_level.top_directives[i];
+        
         if (d.tag == EXPR_FUNCTION_CALL) {
 
             auto callname = d.function_call.name;
             assert(callname->tag == EXPR_IDENTIFIER);
             auto buffer = callname->identifier;
-            if (strncmp(buffer.data, "import", buffer.length) == 0) {
+
+            // TODO we should cache strings in a table to reduce string compares
+            if (buffer.length == 6 && strncmp(buffer.data, "import", buffer.length) == 0) {
 
                 auto name = d.function_call.given_arguments[0];
                 assert(name.tag == EXPR_STRING_LITERAL);
@@ -90,8 +86,8 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
             }
         }
     }
-
-    int slot = all_untyped_files->length+1;
+    
+    int slot = all_untyped_files->count+1;
     bucket_array_append(all_untyped_files, UntypedFile {
             .slot = slot,
             .token_data = flat,
@@ -211,4 +207,20 @@ static Result<Buffer> read_entire_file(const u8 *path) {
 
     auto b = Buffer{.data=data, .length=buffer_length};
     return Result<Buffer>{.ok=b, .tag=Ok};
+}
+
+template<typename T> static void copy_to_flat_array_and_free_buckets(BucketArray<T> array, Array<T> *out_flat) {
+    
+    array_init(out_flat, array.length * BucketArray<T>::BUCKET_MAX_ITEMS);
+
+    auto next = array.first_bucket;
+    while (next) {
+        auto current = next;
+        for (u64 i = 0; i < current->length; i++) {
+            T data = current->items[i];
+            out_flat->data[out_flat->length++] = data;
+        }
+        next = current->next_bucket;
+        free(current);
+    }
 }
