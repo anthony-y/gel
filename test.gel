@@ -19,5 +19,4 @@ func main(args [[u8]]) -> Optional(error) {
     return None
 }
 
-// TODO selector should not be postfix expression
 #import("dev").Assert(main() == three, "unreachable")
