@@ -17,9 +17,17 @@ struct Pair {
 };
 
 template<typename V>
+struct CollisionPair {
+    Buffer key;
+    V value;
+    int slot;
+};
+
+template<typename V>
 struct Table {
     Array<Pair<V>> backing;
     Array<u8> occupied;
+    Table<V> *collisions;
 };
 
 template<typename V>
@@ -54,6 +62,10 @@ void table_append(Table<V> *table, Buffer key, V value) {
     }
     assert(table->occupied.length == table->backing.length);
     int idx = hash % TABLE_SEGMENT_SIZE;
+    if (table->occupied.data[idx] == 1) {
+        // int collision_idx = table->collisions->length;
+        assert(false);
+    }
     Pair<V> pair = { .key = key, .value = value };
     table->backing.data[idx] = pair;
     table->occupied.data[idx] = 1;
