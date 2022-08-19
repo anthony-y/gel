@@ -6,6 +6,7 @@
 
 struct Lexing {
     u8 *this_byte;
+    int error_count = 0;
 };
 
 bool is_digit(u8 c) { return (c >= '0' && c <= '9'); }
@@ -127,12 +128,13 @@ static TokenType compute_next_token(Lexing *state, u8 *start, bool *done) {
         return (dot ? FLOAT_LITERAL : INTEGER_LITERAL);
     }
 
+    state->error_count++;
     return ERROR;
 }
 
 // Performs lexical analysis `of` a UTF-8 encoded string.
 // Populates `output` with tokens.
-bool do_lexical_analysis(Buffer of, BucketArray<TokenData> *output) {
+int do_lexical_analysis(Buffer of, BucketArray<TokenData> *output) {
 
     Lexing state;
     state.this_byte = of.data;
@@ -154,5 +156,5 @@ bool do_lexical_analysis(Buffer of, BucketArray<TokenData> *output) {
         });
     }
 
-    return true;
+    return state.error_count;
 }

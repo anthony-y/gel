@@ -79,4 +79,4 @@ struct TokenData {
     u8 *start;
 };
 
-bool do_lexical_analysis(Buffer of, BucketArray<TokenData> *into);
+int do_lexical_analysis(Buffer of, BucketArray<TokenData> *into);
