@@ -73,7 +73,8 @@ template<typename T> struct BucketArray {
 
     BucketArray<T>::Bucket *first_bucket = nullptr;
     BucketArray<T>::Bucket *current_bucket = nullptr;
-    u64 length = 1;
+    u64 length = 1; // TODO rename to buckets_count
+    u64 count = 0;
 
     T operator[](u64 index) {
         Bucket *next = first_bucket;
@@ -110,6 +111,7 @@ template<typename T> T *bucket_array_append(BucketArray<T> *to, const T &item) {
         to->length++;
     }
     to->current_bucket->items[to->current_bucket->length] = item;
+    to->count++;
     return &to->current_bucket->items[to->current_bucket->length++];
 }
 
