@@ -5,32 +5,9 @@
 #include "arrays.h"
 
 struct UntypedExpr;
+struct UntypedMatcher;
 
-using UntypedBlockRef = int;
-
-enum UntypedThingTag {
-    NODE_NONE,
-
-    NODE_VAR_DECL,
-    NODE_FUNC_DECL,
-    NODE_COERCE_DECL,
-    NODE_VARIANT_DECL,
-    NODE_DIRECTIVE,
-
-    NODE_IDENTIFIER,
-
-    NODE_BLOCK_START,
-    NODE_BLOCK_END,
-
-    NODE_GENERIC_EXPRESSION,
-    NODE_TYPE_NAME_EXPRESSION,
-    NODE_UNARY_EXPRESSION,
-    NODE_BINARY_EXPRESSION,
-    NODE_INT_LITERAL_EXPRESSION,
-    NODE_STRING_LITERAL_EXPRESSION,
-    NODE_FLOAT_LITERAL_EXPRESSION,
-    NODE_IDENTIFIER_EXPRESSION,
-};
+using UntypedBlockHandle = int;
 
 enum UntypedExprTag {
     EXPR_NONE,
@@ -46,8 +23,9 @@ enum UntypedExprTag {
     EXPR_VIEW_TYPE,
     EXPR_ARRAY_TYPE,
     EXPR_DIRECTIVE,
-    EXPR_MATCH,
     EXPR_IF,
+    EXPR_MATCH,
+    EXPR_MATCHER,
     EXPR_PARENS,
 };
 
@@ -78,9 +56,15 @@ struct UntypedArrayTypeExpr {
     UntypedExpr *base_typename;
 };
 
-struct UntypedMatchExpr {
+struct UntypedMatch {
     UntypedExpr *expr;
-    UntypedBlockRef block_ref;
+    Array<UntypedMatcher> patterns;
+};
+
+struct UntypedIf {
+    UntypedExpr *condition;
+    UntypedExpr *else_clause;
+    UntypedBlockHandle block_handle;
 };
 
 struct UntypedExpr {
@@ -96,6 +80,9 @@ struct UntypedExpr {
         UntypedExpr *parens;
         UntypedExpr *directive;
 
+        UntypedMatch match_clause;
+        UntypedIf if_clause;
+
         Buffer identifier;
         Buffer string_literal;
         s64 int_literal;
@@ -103,17 +90,15 @@ struct UntypedExpr {
     };
 };
 
-enum UntypedStmtTag {
-    STMT_EXPR,
+// Pattern matcher inside match clause
+struct UntypedMatcher {
+    UntypedExpr pattern;
+    UntypedExpr then;
 };
 
-struct UntypedStmt {
-    UntypedStmtTag tag;
-    union {
-        UntypedExpr expr;
-    };
-};
-
+// Unlike expressions, declarations are not stored contiguously.
+// This means they can be of different sizes.
+// They will later generate entries in the type-table and/or symbol-table.
 template<typename T> struct UntypedDecl {
     Buffer name;
     T data;
@@ -127,27 +112,18 @@ struct UntypedVar {
 
 struct UntypedFunc {
     Array<UntypedExpr> given_return_types;
-    UntypedBlockRef block_ref;
+    UntypedBlockHandle block_handle;
 };
 
 struct UntypedVariant {
 };
 
-/* TODO
- * Consider that every block underneath the top-level one will have different types here.
- * It will probably be good in the long run to have an additional structure called, like,
- * "LocalBlock" or something to represent this.
- *
- * But for now, I will just keep this.
-*/
 struct UntypedCode {
     Array<UntypedDecl<UntypedVar>>  var_decls;
     Array<UntypedDecl<UntypedFunc>> func_decls;
-    Array<UntypedStmt> all_statements;
+    Array<UntypedExpr> all_statements;
     Array<UntypedExpr> top_directives;
 
-    // TODO these might be better of as normal Array<>s.
-    // I will have to see how the access pattern ends up looking.
     BucketArray<UntypedExpr> nested_expressions;
 };
 

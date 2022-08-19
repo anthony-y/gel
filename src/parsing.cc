@@ -5,6 +5,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <assert.h>
 
 constexpr int AST_MAX_DEPTH = 16;
 
@@ -45,14 +46,14 @@ static void init_ast(UntypedCode *a) {
     bucket_array_init(&a->nested_expressions);
 }
 
-static void push_ast(Parsing *state) {
+static UntypedBlockHandle push_ast(Parsing *state) {
     int slot = array_append(&state->ast, UntypedCode {});
     init_ast(&state->ast[slot]);
     state->ast_stack_top++;
     assert(state->ast_stack_top <= AST_MAX_DEPTH);
+    return slot;
 }
 
-// TODO if there any bugs, first ensure that the slots are getting cleared when popped.
 static inline void pop_ast(Parsing *state) {
     state->ast_stack_top--;
 }
@@ -60,6 +61,9 @@ static inline void pop_ast(Parsing *state) {
 static UntypedCode *temp_ptr_to_this_ast(Parsing *state) {
     return &state->ast[state->ast_stack_top];
 }
+
+static UntypedMatch parse_match(Parsing *state);
+static UntypedIf    parse_if(Parsing *state);
 
 static UntypedExpr parse_simple_expression(Parsing *state);
 static UntypedExpr parse_expression_list(Parsing *state);
@@ -71,9 +75,9 @@ static UntypedExpr parse_lt_gt_comparison(Parsing *state);
 static UntypedExpr parse_addition_subtraction(Parsing *state);
 static UntypedExpr parse_multiplication(Parsing *state);
 static UntypedExpr parse_division_module(Parsing *state);
+static UntypedExpr parse_selector(Parsing *state);
 static UntypedExpr parse_postfix(Parsing *state);
 static UntypedExpr parse_function_call(Parsing *state, UntypedExpr name);
-static UntypedExpr parse_selector(Parsing *state, UntypedExpr left);
 static UntypedExpr parse_array_view(Parsing *state, UntypedExpr name);
 
 static UntypedExpr parse_expression(Parsing *state) {
@@ -249,11 +253,11 @@ static UntypedExpr parse_multiplication(Parsing *state) {
 
 static UntypedExpr parse_division_module(Parsing *state) {
 
-    auto e = parse_postfix(state);
+    auto e = parse_selector(state);
 
     while (match_token(state, SLASH)) {
 
-        auto right = parse_lt_gt_comparison(state);
+        auto right = parse_selector(state);
 
         if (right.tag == EXPR_NONE)
             return right;
@@ -270,6 +274,27 @@ static UntypedExpr parse_division_module(Parsing *state) {
     return e;
 }
 
+// TODO: this may need to be of higher precedence.
+static UntypedExpr parse_selector(Parsing *state) {
+    auto e = parse_postfix(state);
+
+    while (match_token(state, DOT)) {
+        auto right = parse_selector(state);
+
+        if (right.tag == EXPR_NONE)
+            return right;
+
+        UntypedExpr a;
+        a.tag = EXPR_BINARY;
+        a.binary.left = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, e);
+        a.binary.right = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, right);
+        a.binary.op = DOT;
+
+        e = a;
+    }
+    return e;
+}
+
 static UntypedExpr parse_postfix(Parsing *state) {
     
     auto e = parse_simple_expression(state);
@@ -277,10 +302,6 @@ static UntypedExpr parse_postfix(Parsing *state) {
     while (true) {
         if (match_token(state, LPAREN)) {
             return parse_function_call(state, e);
-        }
-
-        if (match_token(state, DOT)) {
-            return parse_selector(state, e);
         }
 
         if (match_token(state, LBRACKET)) {
@@ -315,15 +336,6 @@ static UntypedExpr parse_function_call(Parsing *state, UntypedExpr name) {
         }
     }
 
-    return e;
-}
-
-static UntypedExpr parse_selector(Parsing *state, UntypedExpr left) {
-    UntypedExpr e;
-    e.tag = EXPR_BINARY;
-    e.binary.left = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, left);
-    e.binary.right = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, parse_postfix(state));
-    e.binary.op = DOT;
     return e;
 }
 
@@ -376,8 +388,8 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
 
         case LBRACKET: {
             state->token++;
-            
-            auto size_or_typename = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, parse_expression(state));
+            auto tmp = parse_expression(state);
+            auto size_or_typename = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, tmp);
 
             if (!match_token(state, SEMICOLON)) {
 
@@ -423,12 +435,10 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
 
         case MATCH: {
             state->token++;
-            auto e = parse_expression(state);
-            match_token(state, LBRACE);
-            while (!match_token(state, RBRACE))
-                state->token++;
+            auto m = parse_match(state); 
             return UntypedExpr {
                 .tag = EXPR_MATCH,
+                .match_clause = m
             };
         } break;
 
@@ -477,6 +487,39 @@ static void parse_var_decl(Parsing *state, bool is_const) {
     array_append(&temp_ptr_to_this_ast(state)->var_decls, decl);
 }
 
+static UntypedIf parse_if(Parsing *state) {
+    return UntypedIf {};
+}
+
+static UntypedMatch parse_match(Parsing *state) {
+    match_token(state, MATCH);
+
+    auto e = parse_expression(state);
+    if (e.tag == EXPR_NONE)
+        assert(false);
+
+    UntypedMatch m;
+    m.expr = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, e);
+
+    // TODO memory leak
+    array_init(&m.patterns, 6);
+
+    assert(match_token(state, LBRACE));
+
+    while (!match_token(state, RBRACE)) {
+        auto pattern = parse_expression(state);
+        assert(pattern.tag == EXPR_IDENTIFIER || pattern.tag == EXPR_FUNCTION_CALL);
+        assert(match_token(state, BIG_ARROW));
+        auto then = parse_expression(state);
+        array_append(&m.patterns, UntypedMatcher {
+            .pattern = pattern,
+            .then = then,
+        });
+    }
+
+    return m;
+}
+
 static void parse_statement(Parsing *state) {
     switch (state->token->type) {
         case CONST:
@@ -488,11 +531,19 @@ static void parse_statement(Parsing *state) {
             state->token++;
             parse_var_decl(state, false);
             return;
+
+        case MATCH:
+            state->token++;
+            array_append(&temp_ptr_to_this_ast(state)->all_statements, UntypedExpr {
+                .tag = EXPR_MATCH,
+                .match_clause = parse_match(state)
+            });
+            return;
     }
 
     auto e = parse_expression(state);
-    UntypedStmt s = { .tag = STMT_EXPR, .expr = e };
-    array_append(&temp_ptr_to_this_ast(state)->all_statements, s);
+    match_token(state, SEMICOLON);
+    array_append(&temp_ptr_to_this_ast(state)->all_statements, e);
 }
 
 static void parse_func_decl(Parsing *state) {
@@ -507,8 +558,7 @@ static void parse_func_decl(Parsing *state) {
         decl.name = { .data = nullptr, .length = 0 };
     }
 
-    push_ast(state);
-    decl.data.block_ref = state->ast.length-1;
+    decl.data.block_handle = push_ast(state);
 
     assert(match_token(state, LPAREN));
 

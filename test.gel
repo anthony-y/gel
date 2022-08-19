@@ -1,8 +1,8 @@
-#import("libc")
+// #import("libc")
 
 let arr [heap; int]
 
-func C(from #string) -> [from.length+1; u8] {
+func c(from #string) -> [from.length+1; u8] {
 
     PushAllocator(temporary_allocator)
 
@@ -20,4 +20,4 @@ func main(args [[u8]]) -> Optional(error) {
 }
 
 // TODO selector should not be postfix expression
-// #import("dev").Assert(main() == three, "unreachable")
+#import("dev").Assert(main() == three, "unreachable")
