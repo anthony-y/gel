@@ -61,7 +61,7 @@ using lhs Optional(T) for func Unwrap() -> T {
     }
 }
 
-using lhs Result(V) for func Try() -> T {
+using lhs Result(V) for func Try() -> V {
     match lhs {
         Ok(v)  => return v
         Err(e) => panic(e)
@@ -177,7 +177,7 @@ func GetMessage() -> Payload => .{"Hello world", 12}
 func GetMessage() => Payload.{"Hello world", 12}
 
 
-func PointlessAllocation(T #type) -> Output Result(*T) {
+func PointlessAllocation(T #type) -> Output = Result(*T) {
 
     const N = 64
 
@@ -196,7 +196,7 @@ func PointlessAllocation(T #type) -> Output Result(*T) {
 
     // ctx.allocator will be reset to its previous value at the end of the scope
     // with ctx pushes this modified context for the duration of the scope
-    using ctx.allocator = mem.LinearAllocator; with ctx {
+    using ctx.allocator = mem.LinearAllocator; ctx {
         match temp = Allocate(T*N) {
             Err(err) => return Err(err)
             Ok(ptr)  => result = temp

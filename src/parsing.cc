@@ -466,7 +466,7 @@ static void parse_var_decl(Parsing *state, bool is_const) {
         return;
     }
 
-    decl.data.given_type = parse_expression(state);
+    decl.data.given_type = parse_selector(state);
 
     if (match_token(state, EQUAL)) {
         auto expr = parse_expression(state);
@@ -525,12 +525,12 @@ static void parse_statement(Parsing *state) {
         case CONST:
             state->token++;
             parse_var_decl(state, true);
-            return;
+            break;
 
         case LET:
             state->token++;
             parse_var_decl(state, false);
-            return;
+            break;
 
         case MATCH:
             state->token++;
@@ -538,12 +538,14 @@ static void parse_statement(Parsing *state) {
                 .tag = EXPR_MATCH,
                 .match_clause = parse_match(state)
             });
-            return;
-    }
+            break;
 
-    auto e = parse_expression(state);
-    match_token(state, SEMICOLON);
-    array_append(&temp_ptr_to_this_ast(state)->all_statements, e);
+        default: {
+            auto e = parse_expression(state);
+            match_token(state, SEMICOLON);
+            array_append(&temp_ptr_to_this_ast(state)->all_statements, e);
+        } break;
+    }
 }
 
 static void parse_func_decl(Parsing *state) {
@@ -552,11 +554,13 @@ static void parse_func_decl(Parsing *state) {
 
     UntypedDecl<UntypedFunc> decl;
     
-    if (match_token(state, IDENTIFIER)) {
+    if (state->token->type == IDENTIFIER) {
         decl.name = { .data = state->token->start, .length = (usize)state->token->length };
     } else {
         decl.name = { .data = nullptr, .length = 0 };
     }
+
+    state->token++;
 
     decl.data.block_handle = push_ast(state);
 

@@ -16,12 +16,6 @@ static Result<Buffer> read_entire_file(const u8 *path);
 // TODO move to arrays.h probably (would require refactor)
 template<typename T> static void copy_to_flat_array_and_free_buckets(BucketArray<T> array, Array<T> *out_flat);
 
-Buffer copy_token_string(TokenData t) {
-    u8 *data = (u8 *)malloc(t.length+1);
-    strncpy(data, t.start, t.length);
-    return { .data = data, .length = (usize)t.length };
-}
-
 Buffer copy_string(const u8 *t) {
     const usize length = strlen(t);
     u8 *data = (u8 *)malloc(length+1);
@@ -51,6 +45,13 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
     }
 
     copy_to_flat_array_and_free_buckets(tokens, &flat);
+
+#if 0
+    for (int i = 0; i < flat.length; i++) {
+        auto t = flat.data[i];
+        printf("%.*s (%d)\n", t.length, t.start, t.type);
+    }
+#endif
 
     Array<UntypedCode> ast;
     int success = do_parsing(flat, &ast);
@@ -113,7 +114,7 @@ static void deinit_untyped_files(Array<UntypedFile> *files) {
     }
 }
 
-static bool test_table() {
+static bool run_tests_for_table() {
     Table<int> t;
     table_init(&t);
     Defer (table_free(&t));
@@ -140,11 +141,12 @@ int main(int args_count, char *args[]) {
         return 1;
     }
 
-    assert(test_table());
+    assert(run_tests_for_table());
 
     auto main_file_path = (u8 *)args[1];
 
     BucketArray<UntypedFile> all_untyped_files;
+    Array<UntypedFile> flat_file_array;
     bucket_array_init(&all_untyped_files);
 
     int main_file_slot = do_frontend(&all_untyped_files, main_file_path);
@@ -152,7 +154,6 @@ int main(int args_count, char *args[]) {
         return 1;
     }
 
-    Array<UntypedFile> flat_file_array;
     copy_to_flat_array_and_free_buckets(all_untyped_files, &flat_file_array);
     Defer ({
         deinit_untyped_files(&flat_file_array);
@@ -160,6 +161,8 @@ int main(int args_count, char *args[]) {
     });
 
     Array<TypedFile> typed_files;
+    array_init(&typed_files, 8);
+    Defer (array_free(&typed_files));
     int typing_status = apply_types_and_build_symbol_tables(flat_file_array, &typed_files);
     if (typing_status < 0) {
         return 1;
@@ -172,6 +175,12 @@ int main(int args_count, char *args[]) {
 
 #if 0
     Array<Bytecode> bytecode_modules = compile_to_bytecode(typed_files);
+    RuntimeResult runtime_result = do_compile_time_tasks(bytecode_modules);
+    GenerationResult final_result = perform_final_lowering(runtime_result);
+    if (final_result.error_count < 0) {
+        printf("gel: There were errors... exiting.\n");
+        return 1;
+    }
 #endif
 
     printf("gel: Compilation was a success!\n");

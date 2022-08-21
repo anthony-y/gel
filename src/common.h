@@ -19,3 +19,5 @@ struct Buffer {
    u8    *data;
    usize  length;
 };
+
+using BufferView = Buffer;

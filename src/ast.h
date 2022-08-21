@@ -14,7 +14,6 @@ enum UntypedExprTag {
     EXPR_BINARY,
     EXPR_UNARY,
     EXPR_IDENTIFIER,
-    EXPR_TYPENAME,
     EXPR_INT_LITERAL,
     EXPR_STRING_LITERAL,
     EXPR_FLOAT_LITERAL,
@@ -27,6 +26,7 @@ enum UntypedExprTag {
     EXPR_MATCH,
     EXPR_MATCHER,
     EXPR_PARENS,
+    EXPR_USING,
 };
 
 struct UntypedBinaryExpr {
@@ -100,7 +100,7 @@ struct UntypedMatcher {
 // This means they can be of different sizes.
 // They will later generate entries in the type-table and/or symbol-table.
 template<typename T> struct UntypedDecl {
-    Buffer name;
+    BufferView name;
     T data;
 };
 
@@ -116,6 +116,9 @@ struct UntypedFunc {
 };
 
 struct UntypedVariant {
+};
+
+struct UntypedStruct {
 };
 
 struct UntypedCode {

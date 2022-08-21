@@ -2,6 +2,8 @@
 
 let arr [heap; int]
 
+const i string = "Hi"
+
 func c(from #string) -> [from.length+1; u8] {
 
     PushAllocator(temporary_allocator)
@@ -14,9 +16,7 @@ func c(from #string) -> [from.length+1; u8] {
     cstr.(from.length) = 0
 }
 
-func main(args [[u8]]) -> Optional(error) {
-    libc.Printf(C("%s"), args.0)
+func main(args [string]) -> Optional(error) {
+    libc.Printf(c("%s"), args.0)
     return None
 }
-
-#import("dev").Assert(main() == three, "unreachable")

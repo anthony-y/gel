@@ -7,9 +7,26 @@
 #include "ast.h"
 
 using TypeHandle = int;
-using TypedDeclHandle = int;
 using TypedFileHandle = int;
 using ScopeHandle = int;
+
+enum TypedDeclTag {
+    DECL_FUNCTION,
+    DECL_VARIABLE,
+    DECL_VARIANT,
+    DECL_STRUCT,
+
+    // Used to represent primitive types in the symbol table.
+    //
+    // However, this can also be used to access directly the type of e.g. DECL_VARIABLE
+    // without polluting the cache with the entire declaration.
+    DECL_TYPE,
+};
+
+struct TypedDeclHandle {
+    TypedDeclTag tag; // which array should we look in?
+    int slot; // where in the array?
+};
 
 enum TypeTag {
     TYPE_PRIMITIVE_INT,
@@ -50,30 +67,65 @@ struct Type {
 };
 
 struct TypedExpr {
+    TypeHandle type_of;
+};
 
+// Encodes a thing which either produces, or is itself of, a specified type.
+template<typename T> struct Typed {
+
+    // type_of:
+    //   for inferred variable decls: the type of the value
+    //   for explicit variable decls: the given type
+    //   for function decls: the type of the signature
+    //   for variant & struct decls: the resulting type of the declaration
+    //
+    TypeHandle type_of;
+
+    Buffer name;
+
+    T data;
+};
+
+struct StructDecl {
+
+};
+
+struct VariantDecl {
+
+};
+
+struct FunctionDecl {
+    ScopeHandle scope_handle;
+};
+
+enum VariableFlags {
+    VARIABLE_IS_INFERRED = 1 << 0,
+    VARIABLE_IS_CONST = 1 << 1,
+    VARIABLE_IS_INITED = 1 << 2,
+};
+struct VariableDecl {
+    int flags;
+    TypedExpr initial_value;
 };
 
 struct Scope {
-    ScopeHandle self;
-    Array<TypedExpr> things;
-};
-
-template<typename T> struct Typed {
-    TypeHandle type_of;
-    ScopeHandle residing;
-    T data;
+    ScopeHandle slot;
+    Array<TypedExpr> statements;
+    Array<Typed<VariableDecl>> locals;
 };
 
 struct TypedFile {
     Table<TypedDeclHandle> symbol_table;
-    Array<Type> all_types;
+
     Array<Scope> all_scopes;
-/*
+
+    Array<Type> all_types;
+    
     Array<Typed<StructDecl>> struct_decls;
     Array<Typed<VariantDecl>> variant_decls;
     Array<Typed<FunctionDecl>> function_decls;
     Array<Typed<VariableDecl>> variable_decls;
-*/
+
 };
 
 int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);
