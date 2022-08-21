@@ -6,9 +6,21 @@
 #include "table.h"
 #include "ast.h"
 
-using TypeHandle = int;
 using TypedFileHandle = int;
 using ScopeHandle = int;
+
+struct TypeHandle {
+    int flags = 0;
+    int slot = -1;
+
+    bool operator == (const TypeHandle &right) {
+        return right.flags == flags && right.slot == slot;
+    }
+
+    bool operator != (const TypeHandle &right) {
+        return right.flags != flags || right.slot != slot;
+    }
+};
 
 enum TypedDeclTag {
     DECL_FUNCTION,
@@ -43,8 +55,8 @@ enum TypeTag {
 };
 
 enum TypeFlags : int {
-    TYPE_IS_SIGNED = 1 << 0,
-    TYPE_IS_COMPILE_TIME = 1 << 1,
+    TYPE_IS_SIGNED = 0x1 << 0, // for integer types, is it signed?
+    TYPE_IS_COMPILE_TIME = 0x1 << 1,
 };
 
 union TypeMetadata {
@@ -60,7 +72,6 @@ union TypeMetadata {
 
 struct Type {
     TypeTag tag;
-    int flags;
     Buffer name;
     usize size_in_bytes;
     TypeMetadata *metadata;
@@ -99,12 +110,12 @@ struct FunctionDecl {
 };
 
 enum VariableFlags {
-    VARIABLE_IS_INFERRED = 1 << 0,
-    VARIABLE_IS_CONST = 1 << 1,
-    VARIABLE_IS_INITED = 1 << 2,
+    VARIABLE_IS_INFERRED = 0x1 << 0, // variable was not explicitly given a type at its declaration.
+    VARIABLE_IS_CONST = 0x1 << 1, // variable was marked as const at it's declaration.
+    VARIABLE_IS_INITED = 0x1 << 2, // variable was given an initial value at it's declaration.
 };
 struct VariableDecl {
-    int flags;
+    int flags = 0;
     TypedExpr initial_value;
 };
 
@@ -115,17 +126,17 @@ struct Scope {
 };
 
 struct TypedFile {
-    Table<TypedDeclHandle> symbol_table;
 
-    Array<Scope> all_scopes;
+    Table<TypedDeclHandle> symbol_table; // maps all types and declarations in the file to a handle.
 
+    // TypedDeclHandle describes which one of these arrays contains the data, and where.
     Array<Type> all_types;
-    
     Array<Typed<StructDecl>> struct_decls;
     Array<Typed<VariantDecl>> variant_decls;
     Array<Typed<FunctionDecl>> function_decls;
     Array<Typed<VariableDecl>> variable_decls;
 
+    Array<Scope> all_scopes;
 };
 
 int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);

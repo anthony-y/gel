@@ -10,6 +10,9 @@
 
 #include <string_view>
 
+#define Error_Type() (TypeHandle { .flags = 0, .slot = -1})
+#define Symbol_As_Type(the_slot) (TypeHandle { .flags = 0, .slot = the_slot})
+
 struct Typing {
     const Array<UntypedCode> from_ast;
     TypedFile into;
@@ -33,13 +36,21 @@ TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) 
 
     switch (type_name.tag) {
 
-    case EXPR_NONE: return -1;
+    case EXPR_NONE: return Error_Type();
 
-    case EXPR_BINARY: return -1;
+    case EXPR_BINARY: return Error_Type();
 
-    case EXPR_FLOAT_LITERAL: return -1;
+    case EXPR_FLOAT_LITERAL: return Error_Type();
 
-    case EXPR_ARRAY_TYPE: return -1;
+    case EXPR_ARRAY_TYPE: return Error_Type();
+
+    case EXPR_DIRECTIVE: {
+        auto inner_handle = resolve_expression_as_typename(state, *type_name.directive);
+        TypeHandle wrapped;
+        wrapped.flags = inner_handle.flags | TYPE_IS_COMPILE_TIME;
+        wrapped.slot = inner_handle.slot;
+        return wrapped;
+    } break;
 
     case EXPR_IDENTIFIER: {
         
@@ -48,28 +59,28 @@ TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) 
 
         if (decl_handle.tag == Error) {
             printf("no such type '%.*s'\n", identifier.length, identifier.data);
-            return -1;
+            return Error_Type();
         }
 
-        return decl_handle.ok.slot;
+        return Symbol_As_Type(decl_handle.ok.slot);
 
     } break;
 
     }
 
-    return -1;
+    return Error_Type();
 }
 
 TypeHandle produce_function_type(Typing *state, UntypedFunc f, Buffer copied_name) {
-    return -1;
+    return Error_Type();
 }
 
 TypeHandle produce_variant_type(Typing *state, UntypedVariant v, Buffer copied_name) {
-    return -1;
+    return Error_Type();
 }
 
 TypeHandle produce_struct_type(Typing *state, UntypedStruct s, Buffer copied_name) {
-    return -1;
+    return Error_Type();
 }
 
 TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
@@ -80,19 +91,29 @@ TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
         auto result = table_get(state->into.symbol_table, copy_string("int"));
         assert(result.tag == Ok);
         assert(result.ok.tag == DECL_TYPE);
-        return result.ok.slot;
+
+        TypeHandle handle;
+        handle.slot = result.ok.slot;
+        handle.flags |= TYPE_IS_COMPILE_TIME;
+        return handle;
+
     } break;
 
     case EXPR_STRING_LITERAL: {
         auto result = table_get(state->into.symbol_table, copy_string("string"));
         assert(result.tag == Ok);
         assert(result.ok.tag == DECL_TYPE);
-        return result.ok.slot;
+
+        TypeHandle handle;
+        handle.slot = result.ok.slot;
+        handle.flags |= TYPE_IS_COMPILE_TIME;
+        return handle;
+
     } break;
 
     }
 
-    return -1;
+    return Error_Type();
 }
 
 ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle block_handle) {
@@ -123,48 +144,82 @@ Typed<FunctionDecl> function_decl(Typing *state, UntypedDecl<UntypedFunc> f) {
     return decl;
 }
 
-Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> v) {
+Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
 
-    Typed<VariableDecl> decl;
-    decl.name = copy_decl_name(v.name);
-    decl.data.flags = 0;
-    decl.data.initial_value.type_of = -1;
+    Typed<VariableDecl> typed;
+    typed.name = copy_decl_name(untyped.name);
+    typed.data.flags = 0;
+    typed.data.initial_value.type_of = Error_Type();
 
     // Inferred e.g:
     // let i = 10
     //
-    if (v.data.given_type.tag == EXPR_NONE) {
+    if (untyped.data.given_type.tag == EXPR_NONE) {
 
-        decl.data.flags |= VARIABLE_IS_INFERRED;
+        typed.data.flags |= VARIABLE_IS_INFERRED;
         
         // Declaration has no type-name or value.
         // let i
-        if (v.data.expr.tag == EXPR_NONE) {
+        if (untyped.data.expr.tag == EXPR_NONE) {
             printf("error: not enough information to infer type of '%.*s'. Please provide either a type-name, or an initial value.\n",
-                decl.name.length, decl.name.data);
+                typed.name.length, typed.name.data);
 
             assert(false);
         }
 
-        decl.data.flags |= VARIABLE_IS_INITED;
+        typed.data.flags |= VARIABLE_IS_INITED;
 
-        decl.type_of = compute_type_of_expression(state, v.data.expr);
-        decl.data.initial_value.type_of = decl.type_of;
+        typed.type_of = compute_type_of_expression(state, untyped.data.expr);
+        typed.data.initial_value.type_of = typed.type_of;
 
-        return decl;
+        return typed;
     }
     
     // Explicit e.g:
     // let i int = 10
     //
-    decl.type_of = resolve_expression_as_typename(state, v.data.given_type);
 
-    if (v.data.expr.tag != EXPR_NONE) {
-        decl.data.flags |= VARIABLE_IS_INITED;
-        decl.data.initial_value.type_of = compute_type_of_expression(state, v.data.expr);
+    if (untyped.data.given_type.tag == EXPR_DIRECTIVE) {
+        // Handles compile-time type-names such as '#int'
+
+        auto inner_expr = *untyped.data.given_type.directive;
+        
+        // const i #int = 10
+        //          ^^^^^^^^ binary expression
+        //
+        // The left hand side is the type, and the right-hand-side is the initial value expression.
+        if (inner_expr.tag == EXPR_BINARY) {
+            
+            // Type-name expression
+            auto lhs = inner_expr.binary.left;
+
+            // Flag it as compile-time type.
+            typed.type_of = resolve_expression_as_typename(state, *lhs);
+            typed.type_of.flags |= TYPE_IS_COMPILE_TIME;
+            
+            // Compute the type of the value expression and store it.
+            typed.data.initial_value.type_of = compute_type_of_expression(state, *inner_expr.binary.right);
+            typed.data.flags |= VARIABLE_IS_INITED;
+
+            return typed;
+        }
+
+        TypeHandle inner = resolve_expression_as_typename(state, inner_expr);
+        inner.flags |= TYPE_IS_COMPILE_TIME;
+        typed.type_of = inner;
     }
 
-    return decl;
+    else { // type-name is not a directive
+        typed.type_of = resolve_expression_as_typename(state, untyped.data.given_type);
+    }
+
+    if (untyped.data.expr.tag != EXPR_NONE) {
+        // Declaration was given an initial value
+        typed.data.flags |= VARIABLE_IS_INITED;
+        typed.data.initial_value.type_of = compute_type_of_expression(state, untyped.data.expr);
+    }
+
+    return typed;
 }
 
 void init_types(TypedFile *of) {
@@ -177,7 +232,6 @@ void init_types(TypedFile *of) {
         .tag = DECL_TYPE,
         .slot = array_append(&of->all_types, {
             .tag = TYPE_PRIMITIVE_INT,
-            .flags = 0,
             .name = int_name,
             .size_in_bytes = 4,
             .metadata = nullptr,
@@ -189,7 +243,6 @@ void init_types(TypedFile *of) {
         .tag = DECL_TYPE,
         .slot = array_append(&of->all_types, {
             .tag = TYPE_PRIMITIVE_STRING,
-            .flags = 0,
             .name = string_name,
             .size_in_bytes = 4,
             .metadata = nullptr,

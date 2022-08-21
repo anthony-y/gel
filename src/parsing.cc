@@ -279,7 +279,7 @@ static UntypedExpr parse_selector(Parsing *state) {
     auto e = parse_postfix(state);
 
     while (match_token(state, DOT)) {
-        auto right = parse_selector(state);
+        auto right = parse_postfix(state);
 
         if (right.tag == EXPR_NONE)
             return right;

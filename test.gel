@@ -1,8 +1,6 @@
-// #import("libc")
+const i string = "Hi"
 
 let arr [heap; int]
-
-const i string = "Hi"
 
 func c(from #string) -> [from.length+1; u8] {
 
