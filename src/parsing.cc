@@ -631,6 +631,13 @@ void parse_top(Parsing *state, bool *done) {
             array_append(&temp_ptr_to_this_ast(state)->top_directives, parse_expression(state));
             break;
 
+        case STRUCT:
+            state->token += 5;
+            break;
+
+        case VARIANT:
+            while (state->token->type != RBRACE) state->token++;
+
         case END:
             *done = true;
             break;

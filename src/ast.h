@@ -119,11 +119,14 @@ struct UntypedVariant {
 };
 
 struct UntypedStruct {
+    UntypedBlockHandle block_handle;
 };
 
 struct UntypedCode {
     Array<UntypedDecl<UntypedVar>>  var_decls;
     Array<UntypedDecl<UntypedFunc>> func_decls;
+    Array<UntypedDecl<UntypedStruct>> struct_decls;
+
     Array<UntypedExpr> all_statements;
     Array<UntypedExpr> top_directives;
 

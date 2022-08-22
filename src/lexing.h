@@ -63,6 +63,10 @@ enum TokenType : int {
 
     CONTINUE,
 
+    STRUCT,
+
+    VARIANT,
+
     FUNC,
     ELSE,
     THEN,

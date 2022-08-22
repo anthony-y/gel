@@ -82,3 +82,15 @@ Result<V> table_get(Table<V> table, Buffer key) {
     V v = table.backing.data[idx].value;
     return Result<V> { .ok = v, .tag = Ok };
 }
+
+template<typename V>
+void table_replace(Table<V> *table, Buffer key, V value) {
+    int hash = compute_string_hash(key);
+    assert(table->occupied.length == table->backing.length);
+    int idx = hash % TABLE_SEGMENT_SIZE;
+    if (table->occupied.data[idx] == 0) {
+        return;
+    }
+    Pair<V> *pair = &table->backing.data[idx];
+    pair->value = value;
+}

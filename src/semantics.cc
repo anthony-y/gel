@@ -24,9 +24,14 @@ int ensure_code_is_semantically_correct(Array<TypedFile> code) {
                 }
             }
 
-            // If the type of the expression doesn't match the one given type. 
+            // If the type of the expression doesn't match the type given to the declaration.
             if (value_type.slot != given_type.slot) {
-                printf("error: type mismatch: '%.*s'\n", v.name.length, v.name.data);
+                printf(
+                    "error: type mismatch: '%.*s' is declared as type %.*s, yet given value of type %.*s.\n",
+                    v.name.length, v.name.data,
+                    code[0].all_types[given_type.slot].name.length, code[0].all_types[given_type.slot].name.data,
+                    code[0].all_types[value_type.slot].name.length, code[0].all_types[value_type.slot].name.data
+                );
                 return -1;
             }
         }

@@ -16,7 +16,19 @@
 struct Typing {
     const Array<UntypedCode> from_ast;
     TypedFile into;
+    ScopeHandle current_scope = 0;
 };
+
+static void push_scope(Typing *state) {
+    Scope scope;
+    scope.slot = state->current_scope++;
+    array_init(&scope.locals, 10);
+    array_append(&state->into.all_scopes, scope);
+}
+
+static void pop_scope(Typing *state) {
+    state->current_scope--;
+}
 
 Buffer copy_decl_name(BufferView n) {
     u8 *data = (u8 *)malloc(n.length+1);
@@ -32,7 +44,7 @@ constexpr Buffer copy_string(std::string_view raw) {
     return { .data = data, .length = length };
 }
 
-TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) {
+static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) {
 
     switch (type_name.tag) {
 
@@ -55,14 +67,67 @@ TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) 
     case EXPR_IDENTIFIER: {
         
         Buffer identifier = type_name.identifier;
-        Result<TypedDeclHandle> decl_handle = table_get(state->into.symbol_table, identifier);
+        Result<TypedDeclHandle> result = table_get(state->into.symbol_table, identifier);
 
-        if (decl_handle.tag == Error) {
-            printf("no such type '%.*s'\n", identifier.length, identifier.data);
-            return Error_Type();
+        if (result.tag == Error) {
+
+            // Add a new type to the array, with placeholder data
+            // Add its handle to the symbol table
+            // Later, when we come across its declaration, we can just overwrite the type data.
+            // Just before we do semantic checking, we can iterate all the types and error if there are any placeholders left.
+
+
+            // We'll insert a placeholder type with it's name.
+            Type queued = {
+                .tag = TYPE_QUEUED,
+                .name = identifier,
+                .size_in_bytes = 0,
+                .metadata = nullptr,
+            };
+
+            // We create a handle to access it via the type array.
+            TypeHandle queued_handle;
+            queued_handle.slot = array_append(&state->into.all_types, queued);
+
+            // We also create a handle to access it via the symbol table.
+            table_append(&state->into.symbol_table, identifier, {
+                .tag  = DECL_TYPE,
+                .slot = queued_handle.slot,
+            });
+
+            return queued_handle;
         }
 
-        return Symbol_As_Type(decl_handle.ok.slot);
+        TypedDeclHandle symbol_handle = result.ok;
+
+        switch (symbol_handle.tag) {
+
+        case DECL_TYPE: {
+            TypeHandle as_type_handle = Symbol_As_Type(symbol_handle.slot);
+            if (state->into.all_types[as_type_handle.slot].tag == TYPE_QUEUED) {
+                // return as_type_handle;
+            }
+            return as_type_handle;
+        } break;
+            
+        case DECL_VARIABLE: {
+            auto v = state->into.variable_decls[symbol_handle.slot];
+
+            printf("variable '%.*s' is being used as a type-name, but it's declaration does not produce a type\n.",
+                v.name.length, v.name.data);
+            
+            return Error_Type();
+        } break;
+
+        case DECL_FUNCTION: assert(false);
+        
+        case DECL_STRUCT: return state->into.struct_decls[symbol_handle.slot].type_of;
+
+        case DECL_VARIANT: return state->into.variant_decls[symbol_handle.slot].type_of;
+
+        default: assert(false);
+
+        }
 
     } break;
 
@@ -71,19 +136,26 @@ TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type_name) 
     return Error_Type();
 }
 
-TypeHandle produce_function_type(Typing *state, UntypedFunc f, Buffer copied_name) {
+static TypeHandle produce_function_type(Typing *state, UntypedFunc from, Buffer copied_name) {
     return Error_Type();
 }
 
-TypeHandle produce_variant_type(Typing *state, UntypedVariant v, Buffer copied_name) {
+static TypeHandle produce_variant_type(Typing *state, UntypedVariant from, Buffer copied_name) {
     return Error_Type();
 }
 
-TypeHandle produce_struct_type(Typing *state, UntypedStruct s, Buffer copied_name) {
+static TypeHandle produce_struct_type(Typing *state, UntypedStruct from, Buffer copied_name) {
     return Error_Type();
 }
 
-TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
+/*
+This should return a TypedExpr and be renamed to `apply_type_to_expression` or something.
+
+Also, literals should probably have their values deciphered here
+    (and we just store a Buffer in the UntypedExpr)
+
+*/
+static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
 
     switch (of.tag) {
 
@@ -116,7 +188,7 @@ TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
     return Error_Type();
 }
 
-ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle block_handle) {
+static ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle block_handle) {
     UntypedCode block = state->from_ast.data[block_handle];
 
     Scope resulting;
@@ -136,7 +208,7 @@ ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle block_h
     return resulting.slot;
 }
 
-Typed<FunctionDecl> function_decl(Typing *state, UntypedDecl<UntypedFunc> f) {
+static Typed<FunctionDecl> function_decl(Typing *state, UntypedDecl<UntypedFunc> f) {
     Typed<FunctionDecl> decl;
     decl.name = copy_decl_name(f.name); // LEAK
     decl.type_of = produce_function_type(state, f.data, decl.name);
@@ -144,7 +216,15 @@ Typed<FunctionDecl> function_decl(Typing *state, UntypedDecl<UntypedFunc> f) {
     return decl;
 }
 
-Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
+static Typed<StructDecl> struct_decl(Typing *state, UntypedDecl<UntypedStruct> s) {
+    Typed<StructDecl> decl;
+    decl.name = copy_decl_name(s.name);
+    decl.type_of = produce_struct_type(state, s.data, decl.name);
+    decl.data.scope_handle = apply_types_to_owned_block(state, s.data.block_handle);
+    return decl;
+}
+
+static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
 
     Typed<VariableDecl> typed;
     typed.name = copy_decl_name(untyped.name);
@@ -179,7 +259,7 @@ Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
     // let i int = 10
     //
 
-    if (untyped.data.given_type.tag == EXPR_DIRECTIVE) {
+    else if (untyped.data.given_type.tag == EXPR_DIRECTIVE) {
         // Handles compile-time type-names such as '#int'
 
         auto inner_expr = *untyped.data.given_type.directive;
@@ -209,7 +289,7 @@ Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
         typed.type_of = inner;
     }
 
-    else { // type-name is not a directive
+    else { // explicit type-name is present, not a directive
         typed.type_of = resolve_expression_as_typename(state, untyped.data.given_type);
     }
 
@@ -222,7 +302,7 @@ Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
     return typed;
 }
 
-void init_types(TypedFile *of) {
+static void init_types(TypedFile *of) {
     assert(of->symbol_table.backing.data);
 
     array_init(&of->all_types, 24); // LEAK
@@ -263,15 +343,28 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         array_init(&state.into.all_scopes, code.ast.length); // LEAK
         init_types(&state.into); // LEAK
 
-        for (int j = 0; j < top_level.func_decls.length; j++) {
+        for (int j = 0; j < top_level.struct_decls.length; j++) {
 
-            auto f = function_decl(&state, top_level.func_decls[j]);
+            auto s = struct_decl(&state, top_level.struct_decls[j]);
+            int slot = array_append(&state.into.struct_decls, s);
 
-            int slot = array_append(&state.into.function_decls, f);
-            table_append(&state.into.symbol_table, f.name, {
-                .tag = DECL_FUNCTION,
-                .slot = slot,
-            });
+            // The simple may already be in the symbol table as a placeholder.
+            auto maybe_used = table_get(state.into.symbol_table, s.name);
+
+            // If it is, we replace the old placeholder value with the real deal.
+            if (maybe_used.tag == Ok) {
+                table_replace(&state.into.symbol_table, s.name, {
+                    .tag = DECL_STRUCT,
+                    .slot = slot,
+                });
+            }
+
+            else { // otherwise we add a new entry for it.
+                table_append(&state.into.symbol_table, s.name, {
+                    .tag = DECL_STRUCT,
+                    .slot = slot,
+                });
+            }
         }
 
         for (int j = 0; j < top_level.var_decls.length; j++) {
@@ -281,6 +374,17 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
 
             table_append(&state.into.symbol_table, v.name, {
                 .tag = DECL_VARIABLE,
+                .slot = slot,
+            });
+        }
+
+        for (int j = 0; j < top_level.func_decls.length; j++) {
+
+            auto f = function_decl(&state, top_level.func_decls[j]);
+
+            int slot = array_append(&state.into.function_decls, f);
+            table_append(&state.into.symbol_table, f.name, {
+                .tag = DECL_FUNCTION,
                 .slot = slot,
             });
         }

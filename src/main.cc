@@ -40,7 +40,7 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
 
     int lexing_error_count = do_lexical_analysis(file_data, &tokens);
     if (lexing_error_count > 0) {
-        fprintf(stderr, "gel: There were %d errors, exiting.", lexing_error_count);
+        fprintf(stderr, "gel: There were %d errors, exiting.\n", lexing_error_count);
         return -1;
     }
 
@@ -58,7 +58,6 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
     if (success < 0)
         return -1;
 
-    // The first element in this array is guaranteed to be the very top-level scope for each file.
     UntypedCode top_level = ast[0];
 
     // We'll iterate all the directive expressions at the top-level.
@@ -137,7 +136,7 @@ static bool run_tests_for_table() {
 int main(int args_count, char *args[]) {
 
     if (args_count < 2) {
-        printf("gel: please supply the main compilation target (e.g. src/main.gel)");
+        printf("gel: please supply the main compilation target (e.g. src/main.gel)\n");
         return 1;
     }
 

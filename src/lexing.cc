@@ -32,13 +32,12 @@ static void skip_whitespace(Lexing *state) {
         if (*state->this_byte == ' ') state->this_byte++;
         else if (*state->this_byte == '\t') state->this_byte++;
         else if (*state->this_byte == '\n') state->this_byte++;
+        else if (state->this_byte[0] == '/' && state->this_byte[1] == '/') {
+            state->this_byte += 2;
+            while (*state->this_byte++ != '\n');
+            match_next(state, '\n');
+        }
         else break;
-    }
-
-    while (state->this_byte[0] == '/' && state->this_byte[1] == '/') {
-        state->this_byte += 2;
-        while (*state->this_byte++ != '\n');
-        match_next(state, '\n');
     }
 }
 
@@ -64,6 +63,15 @@ static TokenType compute_potential_keyword(u8 *start, int length) {
         else if (strncmp(start, "match", 5) == 0) return MATCH;
         else if (strncmp(start, "break", 5) == 0) return BREAK;
     } break;
+
+    case 6: {
+        if (strncmp(start, "struct", 6) == 0) return STRUCT;
+    } break;
+
+    case 7: {
+        if (strncmp(start, "variant", 7) == 0) return VARIANT;
+    } break;
+
     }
 
     return IDENTIFIER;

@@ -30,7 +30,7 @@ enum TypedDeclTag {
 
     // Used to represent primitive types in the symbol table.
     //
-    // However, this can also be used to access directly the type of e.g. DECL_VARIABLE
+    // However, this can also be used to access directly the type of e.g. SYMBOL_VARIABLE
     // without polluting the cache with the entire declaration.
     DECL_TYPE,
 };
@@ -52,6 +52,8 @@ enum TypeTag {
     TYPE_STACK_ARRAY,
     TYPE_HEAP_ARRAY,
     TYPE_ARRAY_VIEW,
+
+    TYPE_QUEUED,
 };
 
 enum TypeFlags : int {
@@ -98,7 +100,7 @@ template<typename T> struct Typed {
 };
 
 struct StructDecl {
-
+    ScopeHandle scope_handle;
 };
 
 struct VariantDecl {
@@ -107,10 +109,11 @@ struct VariantDecl {
 
 struct FunctionDecl {
     ScopeHandle scope_handle;
+    TypeHandle return_type;
 };
 
 enum VariableFlags {
-    VARIABLE_IS_INFERRED = 0x1 << 0, // variable was not explicitly given a type at its declaration.
+    VARIABLE_IS_INFERRED = 0x1 << 0, // variable was not explicitly given a type at it's declaration.
     VARIABLE_IS_CONST = 0x1 << 1, // variable was marked as const at it's declaration.
     VARIABLE_IS_INITED = 0x1 << 2, // variable was given an initial value at it's declaration.
 };
@@ -129,7 +132,7 @@ struct TypedFile {
 
     Table<TypedDeclHandle> symbol_table; // maps all types and declarations in the file to a handle.
 
-    // TypedDeclHandle describes which one of these arrays contains the data, and where.
+    // `TypedDeclHandle` describes which one of these arrays contains the data, and where.
     Array<Type> all_types;
     Array<Typed<StructDecl>> struct_decls;
     Array<Typed<VariantDecl>> variant_decls;
