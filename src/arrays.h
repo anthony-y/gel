@@ -6,13 +6,6 @@
 #include <assert.h> // TODO: remove this
 #include <string.h>
 
-#if 0
-template<typename T> struct Array<T> {
-    T     *data;
-    usize  length;
-}
-#endif
-
 template<typename T> struct Array {
     T *data;
     int length;
