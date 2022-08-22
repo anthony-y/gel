@@ -56,6 +56,9 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     case EXPR_ARRAY_TYPE: return Error_Type();
 
+    // e.g.
+    // #import("file")
+    //
     case EXPR_DIRECTIVE: {
         auto inner_handle = resolve_expression_as_typename(state, *type_name.directive);
         TypeHandle wrapped;
@@ -64,6 +67,9 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
         return wrapped;
     } break;
 
+    // e.g.
+    // let f Foo
+    //       ^^^
     case EXPR_IDENTIFIER: {
         
         Buffer identifier = type_name.identifier;
@@ -224,6 +230,14 @@ static Typed<StructDecl> struct_decl(Typing *state, UntypedDecl<UntypedStruct> s
     return decl;
 }
 
+static Typed<VariantDecl> variant_decl(Typing *state, UntypedDecl<UntypedVariant> s) {
+    Typed<VariantDecl> decl;
+    decl.name = copy_decl_name(s.name);
+    decl.type_of = produce_variant_type(state, s.data, decl.name);
+    decl.data.scope_handle = apply_types_to_owned_block(state, s.data.block_handle);
+    return decl;
+}
+
 static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyped) {
 
     Typed<VariableDecl> typed;
@@ -332,6 +346,8 @@ static void init_types(TypedFile *of) {
 
 int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output) {
 
+    int error_count = 0; // TODO actual error function
+
     for (int i = 0; i < to.length; i++) {
         auto code = to[i];
         auto top_level = code.ast[0];
@@ -340,6 +356,8 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         table_init(&state.into.symbol_table); // LEAK
         array_init(&state.into.function_decls, top_level.func_decls.length); // LEAK
         array_init(&state.into.variable_decls, top_level.var_decls.length); // LEAK
+        array_init(&state.into.struct_decls, top_level.struct_decls.length); // LEAK
+        array_init(&state.into.variant_decls, top_level.variant_decls.length); // LEAK
         array_init(&state.into.all_scopes, code.ast.length); // LEAK
         init_types(&state.into); // LEAK
 
@@ -353,6 +371,13 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
 
             // If it is, we replace the old placeholder value with the real declaration.
             if (maybe_used.tag == Ok) {
+
+                TypedDeclHandle existing = maybe_used.ok;
+                if (existing.tag != DECL_TYPE) {
+                    printf("redefinition of type '%.*s'.\n", s.name.length, s.name.data);
+                    error_count++;
+                }
+
                 table_replace(&state.into.symbol_table, s.name, {
                     .tag = DECL_STRUCT,
                     .slot = slot,
@@ -362,6 +387,30 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
             else { // otherwise we add a new entry for it.
                 table_append(&state.into.symbol_table, s.name, {
                     .tag = DECL_STRUCT,
+                    .slot = slot,
+                });
+            }
+        }
+
+        for (int j = 0; j < top_level.variant_decls.length; j++) {
+
+            auto s = variant_decl(&state, top_level.variant_decls[j]);
+            int slot = array_append(&state.into.variant_decls, s);
+
+            // The struct may already be in the symbol table as a placeholder.
+            auto maybe_used = table_get(state.into.symbol_table, s.name);
+
+            // If it is, we replace the old placeholder value with the real declaration.
+            if (maybe_used.tag == Ok) {
+                table_replace(&state.into.symbol_table, s.name, {
+                    .tag = DECL_VARIANT,
+                    .slot = slot,
+                });
+            }
+
+            else { // otherwise we add a new entry for it.
+                table_append(&state.into.symbol_table, s.name, {
+                    .tag = DECL_VARIANT,
                     .slot = slot,
                 });
             }
@@ -392,5 +441,5 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         array_append(output, state.into);
     }
 
-    return 0;
+    return error_count;
 }

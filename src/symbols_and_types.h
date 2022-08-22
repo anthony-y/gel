@@ -104,7 +104,7 @@ struct StructDecl {
 };
 
 struct VariantDecl {
-
+    ScopeHandle scope_handle;
 };
 
 struct FunctionDecl {
