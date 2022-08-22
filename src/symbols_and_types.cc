@@ -348,10 +348,10 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
             auto s = struct_decl(&state, top_level.struct_decls[j]);
             int slot = array_append(&state.into.struct_decls, s);
 
-            // The simple may already be in the symbol table as a placeholder.
+            // The struct may already be in the symbol table as a placeholder.
             auto maybe_used = table_get(state.into.symbol_table, s.name);
 
-            // If it is, we replace the old placeholder value with the real deal.
+            // If it is, we replace the old placeholder value with the real declaration.
             if (maybe_used.tag == Ok) {
                 table_replace(&state.into.symbol_table, s.name, {
                     .tag = DECL_STRUCT,
