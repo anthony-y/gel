@@ -182,7 +182,7 @@ int main(int args_count, char *args[]) {
     }
 #endif
 
-    printf("gel: Compilation was a success!\n");
+    printf("gel: done!\n");
     return 0;
 }
 
