@@ -39,8 +39,10 @@ static bool match_token(Parsing *state, TokenType type) {
 }
 
 static void init_ast(UntypedCode *a) {
-    array_init(&a->var_decls, 32);
-    array_init(&a->func_decls, 32);
+    array_init(&a->var_decls, 16);
+    array_init(&a->func_decls, 16);
+    array_init(&a->variant_decls, 16);
+    array_init(&a->struct_decls, 16);
     array_init(&a->all_statements, 32);
     array_init(&a->top_directives, 16);
     bucket_array_init(&a->nested_expressions);
@@ -420,6 +422,24 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
             };
         } break;
 
+        case MINUS:
+        case EXCLAMATION:
+        case AMPERSAND:
+        case AT:
+        case STAR: {
+            state->token++;
+            return UntypedExpr {
+                .tag = EXPR_UNARY,
+                .unary = {
+                    .op = now.type,
+                    .inner = bucket_array_append(
+                        &temp_ptr_to_this_ast(state)->nested_expressions,
+                        parse_expression(state)
+                    ),
+                }
+            };
+        } break;
+
         case LPAREN: {
             state->token++;
             auto inner = parse_expression(state);
@@ -612,6 +632,81 @@ static void parse_func_decl(Parsing *state) {
     array_append(&temp_ptr_to_this_ast(state)->func_decls, decl);
 }
 
+static void parse_struct(Parsing *state) {
+    if (!state->token->type == IDENTIFIER) {
+        bool token_is_ident_error = false;
+        assert(token_is_ident_error);
+    }
+
+    UntypedDecl<UntypedStruct> decl;
+
+    if (state->token->type == IDENTIFIER) {
+        decl.name = { .data = state->token->start, .length = (usize)state->token->length };
+    } else {
+        assert(false);
+    }
+    state->token++;
+
+    if (!match_token(state, LBRACE)) {
+        bool no_lbrace = false;
+        assert(no_lbrace);
+    }
+
+    decl.data.block_handle = push_ast(state);
+
+    while (!match_token(state, RBRACE)) {
+
+        if (match_token(state, CONST)) {
+            parse_var_decl(state, true);
+        } else if (state->token->type == IDENTIFIER) {
+            parse_var_decl(state, false);
+        }
+    }
+
+    pop_ast(state);
+
+    array_append(&temp_ptr_to_this_ast(state)->struct_decls, decl);
+}
+
+static void parse_variant(Parsing *state) {
+    if (!state->token->type == IDENTIFIER) {
+        bool token_is_ident_error = false;
+        assert(token_is_ident_error);
+    }
+
+    UntypedDecl<UntypedVariant> decl;
+
+    if (state->token->type == IDENTIFIER) {
+        decl.name = { .data = state->token->start, .length = (usize)state->token->length };
+    } else {
+        assert(false);
+    }
+    state->token++;
+
+    // todo type parameters
+    if (state->token->type == LPAREN) {
+        while (!match_token(state, RPAREN)) {
+            state->token++;
+        }
+    }
+
+    if (!match_token(state, LBRACE)) {
+        bool no_lbrace = false;
+        assert(no_lbrace);
+    }
+
+    decl.data.block_handle = push_ast(state);
+
+    while (!match_token(state, RBRACE)) {
+        parse_expression(state);
+        match_token(state, COMMA);
+    }
+
+    pop_ast(state);
+
+    array_append(&temp_ptr_to_this_ast(state)->variant_decls, decl);
+}
+
 void parse_top(Parsing *state, bool *done) {
     TokenData token = *state->token++;
     switch (token.type) {
@@ -632,11 +727,12 @@ void parse_top(Parsing *state, bool *done) {
             break;
 
         case STRUCT:
-            state->token += 5;
+            parse_struct(state);
             break;
 
         case VARIANT:
-            while (state->token->type != RBRACE) state->token++;
+            parse_variant(state);
+            break;
 
         case END:
             *done = true;
