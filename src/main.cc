@@ -130,7 +130,18 @@ static bool run_tests_for_table() {
     Result<int> hopefully_none = table_get(t, copy_string("My incorrect string"));
     bool c = hopefully_none.tag == Error && hopefully_none.error == true;
 
-    return (a && b && c);
+    table_append(&t, copy_string("costarring"), 144);
+    hopefully_none = table_get(t, copy_string("liquid"));
+    bool d = hopefully_none.tag == Error && hopefully_none.error == true;
+
+    table_append(&t, copy_string("liquid"), 244);
+    Result<int> hopefully_244 = table_get(t, copy_string("liquid"));
+    bool e = hopefully_244.tag == Ok && hopefully_244.ok == 244;
+
+    Result<int> hopefully_144 = table_get(t, copy_string("costarring"));
+    bool f = hopefully_144.tag == Ok && hopefully_144.ok == 144;
+
+    return (a && b && c && d && e && f);
 }
 
 int main(int args_count, char *args[]) {
