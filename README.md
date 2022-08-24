@@ -20,7 +20,7 @@ Work in progress
 
 ### Semantic analysis
 
-Planned
+Work in progress
 
 ### Bytecode generation
 
