@@ -6,21 +6,12 @@
 #include "table.h"
 #include "ast.h"
 
+#define GEL_GENERIC_QUEUED_TYPE_SLOT 0
+
 using TypedFileHandle = int;
 using ScopeHandle = int;
 
-struct TypeHandle {
-    int flags = 0;
-    int slot = -1;
-
-    bool operator == (const TypeHandle &right) {
-        return right.flags == flags && right.slot == slot;
-    }
-
-    bool operator != (const TypeHandle &right) {
-        return right.flags != flags || right.slot != slot;
-    }
-};
+struct TypeHandle;
 
 enum TypedDeclTag {
     DECL_FUNCTION,
@@ -33,12 +24,22 @@ enum TypedDeclTag {
     // However, this can also be used to access directly the type of e.g. SYMBOL_VARIABLE
     // without polluting the cache with the entire declaration.
     DECL_TYPE,
+
+    // A declaration whose name was referenced before it was declared.
+    // When the declaration appears in the code, it's actual data will replace this.
+    //
+    // At the end of symbol resolution, and before semantic anaylsis, 
+    //  any remaining DECL_QUEUED's will result in an undeclared identifier error.
+    //
+    // DECL_QUEUED,
 };
 
 struct TypedDeclHandle {
     TypedDeclTag tag; // which array should we look in?
     int slot; // where in the array?
 };
+
+
 
 enum TypeTag {
     TYPE_PRIMITIVE_INT,
@@ -58,7 +59,14 @@ enum TypeTag {
 
 enum TypeFlags : int {
     TYPE_IS_SIGNED = 0x1 << 0, // for integer types, is it signed?
-    TYPE_IS_COMPILE_TIME = 0x1 << 1,
+    TYPE_IS_POLYMORPHIC = 0x1 << 2,
+    TYPE_IS_ALWAYS_COMPILE_TIME = 0x1 << 3, // not used yet but I anticipate it's use
+};
+
+enum TypeHandleFlags : int {
+    TYPE_HANDLE_IS_COMPILE_TIME = 0x1 << 0,
+    TYPE_HANDLE_IS_POINTER = 0x1 << 1,
+    TYPE_HANDLE_IS_POLYMORPHIC = 0x1 << 2,
 };
 
 union TypeMetadata {
@@ -75,9 +83,26 @@ union TypeMetadata {
 struct Type {
     TypeTag tag;
     Buffer name;
-    usize size_in_bytes;
+    int size_in_bytes;
+    int flags;
     TypeMetadata *metadata;
 };
+
+struct TypeHandle {
+    int flags = 0;
+    int slot = -1;
+
+    bool operator == (const TypeHandle &right) {
+        return right.flags == flags && right.slot == slot;
+    }
+
+    bool operator != (const TypeHandle &right) {
+        return right.flags != flags || right.slot != slot;
+    }
+};
+
+
+
 
 struct TypedExpr {
     TypeHandle type_of;
@@ -98,6 +123,9 @@ template<typename T> struct Typed {
 
     T data;
 };
+
+
+
 
 struct StructDecl {
     ScopeHandle scope_handle;
@@ -133,11 +161,12 @@ struct TypedFile {
     Table<TypedDeclHandle> symbol_table; // maps all types and declarations in the file to a handle.
 
     // `TypedDeclHandle` describes which one of these arrays contains the data, and where.
-    Array<Type> all_types;
-    Array<Typed<StructDecl>> struct_decls;
-    Array<Typed<VariantDecl>> variant_decls;
-    Array<Typed<FunctionDecl>> function_decls;
-    Array<Typed<VariableDecl>> variable_decls;
+    Array<Typed<StructDecl>> struct_decls; // DECL_STRUCT
+    Array<Typed<VariantDecl>> variant_decls; // DECL_VARIANT
+    Array<Typed<FunctionDecl>> function_decls; // DECL_FUNCTION
+    Array<Typed<VariableDecl>> variable_decls; // DECL_VARIABLE
+
+    Array<Type> all_types; // DECL_TYPE
 
     Array<Scope> all_scopes;
 };

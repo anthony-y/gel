@@ -58,6 +58,7 @@ void table_free(Table<V> *table) {
     if (table->collisions) table_free(table->collisions);
 }
 
+// FNV-1a
 static usize compute_string_hash(Buffer buffer) {
     usize hash = FNV_OFFSET_BASIS;
 

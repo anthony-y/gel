@@ -1,9 +1,16 @@
-// const i int = j // depends j
+const i int = j // depends j
 const j = 12 // depends none
 
 let arr [heap; int] // depends int
 
-const d Depends
+const d Pointer(Depends)
+
+variant Pointer (T #type = void) {
+    To ( *T ),
+    Null(),
+}
+
+const m type_of(main) = c_string
 
 struct Depends {
     a int
@@ -14,7 +21,7 @@ func main(args [string]) -> Optional(error) { // depends Optional, error
     return None // depends type_of(main).return_type
 }
 
-variant Optional (V #type = Depends) {
+variant Optional (V #type) {
     Some(V),
     None,
 }
@@ -23,9 +30,12 @@ func c_string(from #string) -> [from.length+1; u8] { // depends from
 
     PushAllocator(temporary_allocator) // depends PushAllocator, temporary_allocator
 
+    // todo make it const
     match cstr = Allocate(from.length+1) { // depends Allocate, from, type_of(Allocate).return_type
-        Ok       => CopyBytes(from.length, from.data, cstr) // depends CopyBytes, from, cstr
-        Err(err) => panic(err) // depends none
+
+        Ok(ptr(raw)) => CopyRawBytes(from.length, from.data, raw) // depends CopyBytes, from, cstr, ptr, raw
+
+        Err(err)     => panic(err) // depends none
     }
 
     cstr.(from.length) = 0 // depends cstr, from

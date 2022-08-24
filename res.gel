@@ -1,0 +1,7 @@
+const foo = bar // type_of == #Queued
+
+const bar = "My string"
+
+func main() {
+    fmt.Print(bar)
+}

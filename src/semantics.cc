@@ -17,15 +17,19 @@ int ensure_code_is_semantically_correct(Array<TypedFile> code) {
             auto value_type = v.data.initial_value.type_of;
             auto given_type = v.type_of;
 
-            if (given_type.flags & TYPE_IS_COMPILE_TIME) {
-                if (!(value_type.flags & TYPE_IS_COMPILE_TIME)) {
+            if (given_type.flags & TYPE_HANDLE_IS_COMPILE_TIME) {
+                if (!(value_type.flags & TYPE_HANDLE_IS_COMPILE_TIME)) {
                     printf("error: type mismatch: the initial value of '%.*s' is not available at compile-time.\n", v.name.length, v.name.data);
                     return -1;    
                 }
             }
+            
+            if (value_type.slot == GEL_GENERIC_QUEUED_TYPE_SLOT) {
+                // value_type = resolve_queued_expression_type(v.data.initial_value);
+            }
 
             // If the type of the expression doesn't match the type given to the declaration.
-            if (value_type.slot != given_type.slot) {
+            if (value_type != given_type) {
                 printf(
                     "error: type mismatch: '%.*s' is declared as type %.*s, yet given value of type %.*s.\n",
                     v.name.length, v.name.data,

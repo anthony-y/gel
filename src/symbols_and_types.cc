@@ -10,7 +10,12 @@
 
 #include <string_view>
 
-#define Error_Type() (TypeHandle { .flags = 0, .slot = -1})
+//
+int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);
+//
+
+#define Error_Type()  (TypeHandle { .flags = 0, .slot = -1})
+#define Queued_Type() (TypeHandle { .flags = 0, .slot = GEL_GENERIC_QUEUED_TYPE_SLOT })
 #define Symbol_As_Type(the_slot) (TypeHandle { .flags = 0, .slot = the_slot})
 
 struct Typing {
@@ -18,6 +23,8 @@ struct Typing {
     TypedFile into;
     ScopeHandle current_scope = 0;
 };
+
+static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of);
 
 static void push_scope(Typing *state) {
     Scope scope;
@@ -58,11 +65,13 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     // e.g.
     // #import("file")
+    // ^
+    //  ^^^^^^^^^^^^^^
     //
     case EXPR_DIRECTIVE: {
         auto inner_handle = resolve_expression_as_typename(state, *type_name.directive);
         TypeHandle wrapped;
-        wrapped.flags = inner_handle.flags | TYPE_IS_COMPILE_TIME;
+        wrapped.flags = inner_handle.flags | TYPE_HANDLE_IS_COMPILE_TIME;
         wrapped.slot = inner_handle.slot;
         return wrapped;
     } break;
@@ -108,33 +117,68 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
         switch (symbol_handle.tag) {
 
-        case DECL_TYPE: {
-            TypeHandle as_type_handle = Symbol_As_Type(symbol_handle.slot);
-            if (state->into.all_types[as_type_handle.slot].tag == TYPE_QUEUED) {
-                // return as_type_handle;
-            }
-            return as_type_handle;
-        } break;
+            case DECL_TYPE: {
+                return Symbol_As_Type(symbol_handle.slot);
+            } break;
+
+            case DECL_VARIABLE: {
+                auto v = state->into.variable_decls[symbol_handle.slot];
+
+                printf("variable '%.*s' is being used as a type-name, but it's declaration does not produce a type\n.",
+                    v.name.length, v.name.data);
+                
+                return Error_Type();
+            } break;
+
+            case DECL_FUNCTION: {
+                auto v = state->into.variable_decls[symbol_handle.slot];
+
+                printf("variable '%.*s' is being used as a type-name, but it's declaration does not produce a type\n.",
+                    v.name.length, v.name.data);
+
+                printf("did you mean `type_of(%.*s)` ?\n", v.name.length, v.name.data);
+                
+                return Error_Type();
+            } break;
             
-        case DECL_VARIABLE: {
-            auto v = state->into.variable_decls[symbol_handle.slot];
+            case DECL_STRUCT: return state->into.struct_decls[symbol_handle.slot].type_of;
 
-            printf("variable '%.*s' is being used as a type-name, but it's declaration does not produce a type\n.",
-                v.name.length, v.name.data);
-            
-            return Error_Type();
-        } break;
+            case DECL_VARIANT: return state->into.variant_decls[symbol_handle.slot].type_of;
 
-        case DECL_FUNCTION: assert(false);
-        
-        case DECL_STRUCT: return state->into.struct_decls[symbol_handle.slot].type_of;
-
-        case DECL_VARIANT: return state->into.variant_decls[symbol_handle.slot].type_of;
-
-        default: assert(false);
+            default: assert(false);
 
         }
 
+    } break;
+
+    case EXPR_FUNCTION_CALL: {
+
+        auto call = type_name.function_call;
+        
+        if (call.name->tag == EXPR_IDENTIFIER) {
+            if (strncmp(call.name->identifier.data, "type_of", call.name->identifier.length) == 0) {
+                
+                if (call.given_arguments.length != 1) {
+                    printf("type_of takes a single argument");
+                    return Error_Type();
+                }
+
+                return compute_type_of_expression(state, call.given_arguments.data[0]);
+            }
+        }
+
+        return compute_type_of_expression(state, *call.name);
+
+    } break;
+
+    case EXPR_UNARY: {
+        auto inner = resolve_expression_as_typename(state, *type_name.unary.inner);
+
+        switch (type_name.unary.op) {
+            case STAR: return { .flags = inner.flags | TYPE_HANDLE_IS_POINTER, .slot = inner.slot };
+        }
+
+        assert(false);
     } break;
 
     }
@@ -161,9 +205,9 @@ Also, literals should probably have their values deciphered here
     (and we just store a Buffer in the UntypedExpr)
 
 */
-static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
+static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr expr) {
 
-    switch (of.tag) {
+    switch (expr.tag) {
 
     case EXPR_INT_LITERAL: {   
         auto result = table_get(state->into.symbol_table, copy_string("int"));
@@ -172,7 +216,7 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
 
         TypeHandle handle;
         handle.slot = result.ok.slot;
-        handle.flags |= TYPE_IS_COMPILE_TIME;
+        handle.flags |= TYPE_HANDLE_IS_COMPILE_TIME;
         return handle;
 
     } break;
@@ -184,8 +228,47 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of) {
 
         TypeHandle handle;
         handle.slot = result.ok.slot;
-        handle.flags |= TYPE_IS_COMPILE_TIME;
+        handle.flags |= TYPE_HANDLE_IS_COMPILE_TIME;
         return handle;
+
+    } break;
+
+    case EXPR_IDENTIFIER: {
+
+        auto result = table_get(state->into.symbol_table, expr.identifier);
+
+        // TODO this should only apply at global scope.
+        //   at local scope, we should error immediately because things must be declared in order there.
+        if (result.tag == Error) {
+
+            // todo add queued
+
+            return Queued_Type();
+
+        }
+
+        else {
+            TypedDeclHandle handle = result.ok;
+
+            switch (handle.tag) {
+
+                case DECL_FUNCTION: {
+                    return state->into.function_decls[handle.slot].type_of;
+                } break;
+
+                case DECL_VARIABLE: {
+                    return state->into.variable_decls[handle.slot].type_of;
+                } break;
+
+                case DECL_TYPE: {
+                    return Symbol_As_Type(handle.slot);
+                } break;
+
+                case DECL_STRUCT: {
+                    return state->into.struct_decls[handle.slot].type_of;
+                } break;
+            }
+        }
 
     } break;
 
@@ -243,7 +326,7 @@ static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyp
     Typed<VariableDecl> typed;
     typed.name = copy_decl_name(untyped.name);
     typed.data.flags = 0;
-    typed.data.initial_value.type_of = Error_Type();
+    typed.data.initial_value.type_of = Queued_Type();
 
     // Inferred e.g:
     // let i = 10
@@ -289,7 +372,7 @@ static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyp
 
             // Flag it as compile-time type.
             typed.type_of = resolve_expression_as_typename(state, *lhs);
-            typed.type_of.flags |= TYPE_IS_COMPILE_TIME;
+            typed.type_of.flags |= TYPE_HANDLE_IS_COMPILE_TIME;
             
             // Compute the type of the value expression and store it.
             typed.data.initial_value.type_of = compute_type_of_expression(state, *inner_expr.binary.right);
@@ -299,7 +382,7 @@ static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyp
         }
 
         TypeHandle inner = resolve_expression_as_typename(state, inner_expr);
-        inner.flags |= TYPE_IS_COMPILE_TIME;
+        inner.flags |= TYPE_HANDLE_IS_COMPILE_TIME;
         typed.type_of = inner;
     }
 
@@ -316,10 +399,149 @@ static Typed<VariableDecl> var_decl(Typing *state, UntypedDecl<UntypedVar> untyp
     return typed;
 }
 
+static inline void do_function_declarations(Typing *state, Array<UntypedDecl<UntypedFunc>> decls) {
+    for (int j = 0; j < decls.length; j++) {
+
+        auto f = function_decl(state, decls[j]);
+
+        int slot = array_append(&state->into.function_decls, f);
+
+        // The struct may already be in the symbol table as a placeholder.
+        auto maybe_used = table_get(state->into.symbol_table, f.name);
+
+        // If it is, we replace the old placeholder value with the real declaration.
+        if (maybe_used.tag == Ok) {
+
+            TypedDeclHandle maybe_used_as_type = maybe_used.ok;
+
+            if (maybe_used_as_type.tag == DECL_TYPE) {
+                printf("function '%.*s' is being used as a type-name, but it's declaration does not produce a type.\n",
+                    f.name.length, f.name.data);
+
+                printf("\tDid you mean `type_of(%.*s)` ?\n\n", f.name.length, f.name.data);
+            }
+
+            table_replace(&state->into.symbol_table, f.name, {
+                .tag = DECL_FUNCTION,
+                .slot = slot,
+            });
+
+            continue;
+        }
+
+        // otherwise we add a new entry for it.
+        table_append(&state->into.symbol_table, f.name, {
+            .tag = DECL_FUNCTION,
+            .slot = slot,
+        });
+    }
+}
+
+static inline void do_struct_declarations(Typing *state, Array<UntypedDecl<UntypedStruct>> decls) {
+    for (int j = 0; j < decls.length; j++) {
+
+        auto s = struct_decl(state, decls[j]);
+        int slot = array_append(&state->into.struct_decls, s);
+
+        // The struct may already be in the symbol table as a placeholder.
+        auto maybe_used = table_get(state->into.symbol_table, s.name);
+
+        // If it is, we replace the old placeholder value with the real declaration.
+        if (maybe_used.tag == Ok) {
+
+            TypedDeclHandle existing = maybe_used.ok;
+            if (existing.tag != DECL_TYPE) { // not a TYPE_QUEUED
+                printf("redefinition of type '%.*s'.\n", s.name.length, s.name.data);
+            }
+
+            table_replace(&state->into.symbol_table, s.name, {
+                .tag = DECL_STRUCT,
+                .slot = slot,
+            });
+        }
+
+        else { // otherwise we add a new entry for it.
+            table_append(&state->into.symbol_table, s.name, {
+                .tag = DECL_STRUCT,
+                .slot = slot,
+            });
+        }
+    }
+}
+
+static inline void do_variant_declarations(Typing *state, Array<UntypedDecl<UntypedVariant>> decls) {
+    for (int j = 0; j < decls.length; j++) {
+
+        auto s = variant_decl(state, decls[j]);
+        int slot = array_append(&state->into.variant_decls, s);
+
+        // The struct may already be in the symbol table as a placeholder.
+        auto maybe_used = table_get(state->into.symbol_table, s.name);
+
+        // If it is, we replace the old placeholder value with the real declaration.
+        if (maybe_used.tag == Ok) {
+            table_replace(&state->into.symbol_table, s.name, {
+                .tag = DECL_VARIANT,
+                .slot = slot,
+            });
+        }
+
+        else { // otherwise we add a new entry for it.
+            table_append(&state->into.symbol_table, s.name, {
+                .tag = DECL_VARIANT,
+                .slot = slot,
+            });
+        }
+    }
+}
+
+static inline void do_variable_declarations(Typing *state, Array<UntypedDecl<UntypedVar>> decls) {
+    for (int j = 0; j < decls.length; j++) {
+        auto v = var_decl(state, decls[j]);
+
+        int slot = array_append(&state->into.variable_decls, v);
+        auto maybe_used = table_get(state->into.symbol_table, v.name);
+
+        if (maybe_used.tag == Ok) {
+            TypedDeclHandle handle = maybe_used.ok;
+
+            if (handle.tag != DECL_TYPE) {
+                printf("not a type name"); // todo real error
+                continue;
+            }
+
+            table_replace(&state->into.symbol_table, v.name, {
+                .tag = DECL_VARIABLE,
+                .slot = slot,
+            });
+        }
+
+        else {
+            table_append(&state->into.symbol_table, v.name, {
+                .tag = DECL_VARIABLE,
+                .slot = slot,
+            });
+        }
+    }
+}
+
 static void init_types(TypedFile *of) {
     assert(of->symbol_table.backing.data);
 
     array_init(&of->all_types, 24); // LEAK
+
+    auto queued_name = copy_string("#Queued");
+    int queued_type_slot = array_append(&of->all_types, Type {
+        .tag = TYPE_QUEUED,
+        .name = queued_name,
+        .size_in_bytes = 0,
+        .metadata = nullptr,
+    });
+    assert(GEL_GENERIC_QUEUED_TYPE_SLOT == queued_type_slot);
+    table_append(&of->symbol_table, queued_name, {
+        .tag = DECL_TYPE,
+        .slot = queued_type_slot
+    });
 
     auto int_name = copy_string("int");
     table_append(&of->symbol_table, int_name, {
@@ -361,82 +583,13 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         array_init(&state.into.all_scopes, code.ast.length); // LEAK
         init_types(&state.into); // LEAK
 
-        for (int j = 0; j < top_level.struct_decls.length; j++) {
+        do_struct_declarations(&state, top_level.struct_decls);
 
-            auto s = struct_decl(&state, top_level.struct_decls[j]);
-            int slot = array_append(&state.into.struct_decls, s);
+        do_variant_declarations(&state, top_level.variant_decls);
 
-            // The struct may already be in the symbol table as a placeholder.
-            auto maybe_used = table_get(state.into.symbol_table, s.name);
+        do_variable_declarations(&state, top_level.var_decls);
 
-            // If it is, we replace the old placeholder value with the real declaration.
-            if (maybe_used.tag == Ok) {
-
-                TypedDeclHandle existing = maybe_used.ok;
-                if (existing.tag != DECL_TYPE) {
-                    printf("redefinition of type '%.*s'.\n", s.name.length, s.name.data);
-                    error_count++;
-                }
-
-                table_replace(&state.into.symbol_table, s.name, {
-                    .tag = DECL_STRUCT,
-                    .slot = slot,
-                });
-            }
-
-            else { // otherwise we add a new entry for it.
-                table_append(&state.into.symbol_table, s.name, {
-                    .tag = DECL_STRUCT,
-                    .slot = slot,
-                });
-            }
-        }
-
-        for (int j = 0; j < top_level.variant_decls.length; j++) {
-
-            auto s = variant_decl(&state, top_level.variant_decls[j]);
-            int slot = array_append(&state.into.variant_decls, s);
-
-            // The struct may already be in the symbol table as a placeholder.
-            auto maybe_used = table_get(state.into.symbol_table, s.name);
-
-            // If it is, we replace the old placeholder value with the real declaration.
-            if (maybe_used.tag == Ok) {
-                table_replace(&state.into.symbol_table, s.name, {
-                    .tag = DECL_VARIANT,
-                    .slot = slot,
-                });
-            }
-
-            else { // otherwise we add a new entry for it.
-                table_append(&state.into.symbol_table, s.name, {
-                    .tag = DECL_VARIANT,
-                    .slot = slot,
-                });
-            }
-        }
-
-        for (int j = 0; j < top_level.var_decls.length; j++) {
-
-            auto v = var_decl(&state, top_level.var_decls[j]);
-            int slot = array_append(&state.into.variable_decls, v);
-
-            table_append(&state.into.symbol_table, v.name, {
-                .tag = DECL_VARIABLE,
-                .slot = slot,
-            });
-        }
-
-        for (int j = 0; j < top_level.func_decls.length; j++) {
-
-            auto f = function_decl(&state, top_level.func_decls[j]);
-
-            int slot = array_append(&state.into.function_decls, f);
-            table_append(&state.into.symbol_table, f.name, {
-                .tag = DECL_FUNCTION,
-                .slot = slot,
-            });
-        }
+        do_function_declarations(&state, top_level.func_decls);
 
         array_append(output, state.into);
     }
