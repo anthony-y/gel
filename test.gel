@@ -7,7 +7,7 @@ const d Pointer(Depends)
 
 variant Pointer (T #type = void) {
     To ( *T ),
-    Null(),
+    Null,
 }
 
 const m type_of(main) = c_string

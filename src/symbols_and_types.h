@@ -9,6 +9,7 @@
 #define GEL_GENERIC_QUEUED_TYPE_SLOT 0
 
 using TypedFileHandle = int;
+using TypedExprHandle = int;
 using ScopeHandle = int;
 
 struct TypeHandle;
@@ -25,21 +26,13 @@ enum TypedDeclTag {
     // without polluting the cache with the entire declaration.
     DECL_TYPE,
 
-    // A declaration whose name was referenced before it was declared.
-    // When the declaration appears in the code, it's actual data will replace this.
-    //
-    // At the end of symbol resolution, and before semantic anaylsis, 
-    //  any remaining DECL_QUEUED's will result in an undeclared identifier error.
-    //
-    // DECL_QUEUED,
+    DECL_QUEUED_VAR,
 };
 
 struct TypedDeclHandle {
     TypedDeclTag tag; // which array should we look in?
     int slot; // where in the array?
 };
-
-
 
 enum TypeTag {
     TYPE_PRIMITIVE_INT,
@@ -101,11 +94,35 @@ struct TypeHandle {
     }
 };
 
+enum TypedExprTag {
+    TEXPR_QUEUED,
 
-
+    TEXPR_TYPE_NAME,
+    TEXPR_NONE,
+    TEXPR_BINARY,
+    TEXPR_UNARY,
+    TEXPR_IDENTIFIER,
+    TEXPR_INT_LITERAL,
+    TEXPR_STRING_LITERAL,
+    TEXPR_FLOAT_LITERAL,
+    TEXPR_FUNCTION_CALL,
+    TEXPR_ARRAY_VIEW,
+    TEXPR_VIEW_TYPE,
+    TEXPR_ARRAY_TYPE,
+    TEXPR_DIRECTIVE,
+    TEXPR_IF,
+    TEXPR_MATCH,
+    TEXPR_MATCHER,
+    TEXPR_PARENS,
+    TEXPR_USING,
+};
 
 struct TypedExpr {
     TypeHandle type_of;
+    union {
+        int int_literal;
+        Buffer string_literal;
+    };
 };
 
 // Encodes a thing which either produces, or is itself of, a specified type.
@@ -123,9 +140,6 @@ template<typename T> struct Typed {
 
     T data;
 };
-
-
-
 
 struct StructDecl {
     ScopeHandle scope_handle;
@@ -145,6 +159,7 @@ enum VariableFlags {
     VARIABLE_IS_CONST = 0x1 << 1, // variable was marked as const at it's declaration.
     VARIABLE_IS_INITED = 0x1 << 2, // variable was given an initial value at it's declaration.
 };
+
 struct VariableDecl {
     int flags = 0;
     TypedExpr initial_value;
@@ -158,17 +173,25 @@ struct Scope {
 
 struct TypedFile {
 
-    Table<TypedDeclHandle> symbol_table; // maps all types and declarations in the file to a handle.
+    // Enables random access to the arrays by mapping each element to a `TypedDeclHandle`.
+    Table<TypedDeclHandle> symbol_table;
+
 
     // `TypedDeclHandle` describes which one of these arrays contains the data, and where.
-    Array<Typed<StructDecl>> struct_decls; // DECL_STRUCT
-    Array<Typed<VariantDecl>> variant_decls; // DECL_VARIANT
+    //
+    Array<Typed<StructDecl>> struct_decls;     // DECL_STRUCT
+    Array<Typed<VariantDecl>> variant_decls;   // DECL_VARIANT
     Array<Typed<FunctionDecl>> function_decls; // DECL_FUNCTION
     Array<Typed<VariableDecl>> variable_decls; // DECL_VARIABLE
+    Array<Type> all_types;                     // DECL_TYPE (including queued types)
+    
+    Array<UntypedDecl<UntypedVar>> queue;      // DECL_QUEUED_VAR
 
-    Array<Type> all_types; // DECL_TYPE
 
-    Array<Scope> all_scopes;
+    // These two are not mapped by the `symbol_table`
+    //
+    Array<Scope> all_scopes; // indexed by ScopeHandle
+    BucketArray<TypedExpr> nested_expressions; // allocator for sub-expressions
 };
 
 int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);

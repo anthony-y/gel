@@ -24,12 +24,8 @@ int ensure_code_is_semantically_correct(Array<TypedFile> code) {
                 }
             }
             
-            if (value_type.slot == GEL_GENERIC_QUEUED_TYPE_SLOT) {
-                // value_type = resolve_queued_expression_type(v.data.initial_value);
-            }
-
             // If the type of the expression doesn't match the type given to the declaration.
-            if (value_type != given_type) {
+            if (value_type.slot != given_type.slot) {
                 printf(
                     "error: type mismatch: '%.*s' is declared as type %.*s, yet given value of type %.*s.\n",
                     v.name.length, v.name.data,
