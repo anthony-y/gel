@@ -405,29 +405,11 @@ static Typed<VariableDecl> create_symbol_var (Typing *state, UntypedDecl<Untyped
     return typed;
 }
 
-static inline void do_variable_declarations(Typing *state, Array<UntypedDecl<UntypedVar>> independent, Array<UntypedDecl<UntypedVar>> dependent) {
+static inline void do_variable_declarations(Typing *state, Array<UntypedDecl<UntypedVar>> decls) {
 
-    for (int j = 0; j < independent.length; j++) {
+    for (int j = 0; j < decls.length; j++) {
 
-        UntypedDecl<UntypedVar> decl = independent[j];
-
-        auto v = create_symbol_var(state, decl);
-
-        int slot = array_append(&state->into.variable_decls, v);
-
-        auto maybe_used = table_get(state->into.symbol_table, v.name);
-
-        assert(maybe_used.tag == Error);
-
-        table_append(&state->into.symbol_table, v.name, {
-            .tag = DECL_VARIABLE,
-            .slot = slot,
-        });
-    }
-
-    for (int j = 0; j < dependent.length; j++) {
-
-        UntypedDecl<UntypedVar> decl = dependent[j];
+        UntypedDecl<UntypedVar> decl = decls[j];
 
         auto v = create_symbol_var(state, decl);
 
@@ -591,7 +573,10 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
 
         do_struct_declarations(&state, top_level.struct_decls);
         do_variant_declarations(&state, top_level.variant_decls);
-        do_variable_declarations(&state, top_level.independent_vars, top_level.dependent_vars);
+
+        do_variable_declarations(&state, top_level.independent_vars);
+        do_variable_declarations(&state, top_level.dependent_vars);
+
         do_function_declarations(&state, top_level.func_decls);
 
 
