@@ -139,6 +139,8 @@ Result<V> table_get(Table<V> table, Buffer key) {
 
             next = next->collisions;
         }
+
+        return Err_Result(V);
     }
 
     return Result<V> { .ok = v.value, .tag = Ok };
@@ -174,6 +176,8 @@ void table_replace(Table<V> *table, Buffer key, V value) {
 
             next = next->collisions;
         }
+
+        assert(false);
     }
     
     v->value = value;
