@@ -15,7 +15,6 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
 //
 
 #define Error_Type()  (TypeHandle { .flags = 0, .slot = -1})
-#define Queued_Type() (TypeHandle { .flags = 0, .slot = GEL_GENERIC_QUEUED_TYPE_SLOT })
 #define Symbol_As_Type(the_slot) (TypeHandle { .flags = 0, .slot = the_slot})
 
 struct Typing {
@@ -235,9 +234,7 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr expr) {
         //   at local scope, we should error immediately because things must be declared in order there.
         if (result.tag == Error) {
 
-            // todo add queued
-
-            return Queued_Type();
+            return Error_Type();
             
         }
 
@@ -297,9 +294,11 @@ static ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle 
         auto s = block.all_statements.data[i];
     }
 
+    /*
     for (int i = 0; i < block.var_decls.length; i++) {
         auto v = block.var_decls.data[i];
     }
+    */
 
     return resulting.slot;
 }
@@ -406,90 +405,43 @@ static Typed<VariableDecl> create_symbol_var (Typing *state, UntypedDecl<Untyped
     return typed;
 }
 
+static inline void do_variable_declarations(Typing *state, Array<UntypedDecl<UntypedVar>> independent, Array<UntypedDecl<UntypedVar>> dependent) {
 
-static bool is_expression_atomic(UntypedExpr e) {
+    for (int j = 0; j < independent.length; j++) {
 
-    if (e.tag == EXPR_NONE || e.tag == EXPR_INT_LITERAL || e.tag == EXPR_FLOAT_LITERAL || e.tag == EXPR_STRING_LITERAL)
-        return true;
+        UntypedDecl<UntypedVar> decl = independent[j];
 
-    switch (e.tag) {
-
-    case EXPR_PARENS: return is_expression_atomic(*e.parens);
-
-    case EXPR_UNARY: return is_expression_atomic(*e.unary.inner);
-
-    case EXPR_BINARY: return is_expression_atomic(*e.binary.left) && is_expression_atomic(*e.binary.right);
-
-    case EXPR_ARRAY_TYPE: assert(false); // todo consider
-
-    }
-
-    return false;
-}
-
-static inline void do_variable_declarations(Typing *state, Array<UntypedDecl<UntypedVar>> decls) {
-
-    for (int j = 0; j < decls.length; j++) {
-
-        UntypedDecl<UntypedVar> decl = decls[j];
-
-        // For declarations which have no dependencies, we can just build the declaration immediately.
-        if (is_expression_atomic(decl.data.expr)) {
-
-            auto v = create_symbol_var(state, decl);
-
-            int slot = array_append(&state->into.variable_decls, v);
-
-            auto maybe_used = table_get(state->into.symbol_table, v.name);
-
-            // It's already in the symbol table...
-            if (maybe_used.tag == Ok) {
-
-                if (maybe_used.ok.tag == DECL_QUEUED_VAR) {
-                    continue;
-                }
-
-                else {
-                    assert(false); // todo real errors
-                }
-            }
-
-            table_append(&state->into.symbol_table, v.name, {
-                .tag = DECL_VARIABLE,
-                .slot = slot,
-            });
-
-            continue;
-        }
-
-        int slot = array_append(&state->into.queue, decl);
-
-        table_append(&state->into.symbol_table, decl.name, {
-            .tag = DECL_QUEUED_VAR,
-            .slot = slot,
-        });
-    }
-
-
-    for (int i = 0; i < state->into.queue.length; i++) {
-
-        UntypedDecl<UntypedVar> q = state->into.queue[i];
-
-        auto v = create_symbol_var(state, q);
+        auto v = create_symbol_var(state, decl);
 
         int slot = array_append(&state->into.variable_decls, v);
 
         auto maybe_used = table_get(state->into.symbol_table, v.name);
 
-        assert(maybe_used.tag == Ok);
+        assert(maybe_used.tag == Error);
 
-        table_replace(&state->into.symbol_table, v.name, {
+        table_append(&state->into.symbol_table, v.name, {
             .tag = DECL_VARIABLE,
             .slot = slot,
         });
-
     }
 
+    for (int j = 0; j < dependent.length; j++) {
+
+        UntypedDecl<UntypedVar> decl = dependent[j];
+
+        auto v = create_symbol_var(state, decl);
+
+        int slot = array_append(&state->into.variable_decls, v);
+
+        auto maybe_used = table_get(state->into.symbol_table, v.name);
+
+        assert(maybe_used.tag == Error);
+
+        table_append(&state->into.symbol_table, v.name, {
+            .tag = DECL_VARIABLE,
+            .slot = slot,
+        });
+    }
 }
 
 static inline void do_function_declarations(Typing *state, Array<UntypedDecl<UntypedFunc>> decls) {
@@ -593,19 +545,6 @@ static void init_types(TypedFile *of) {
 
     array_init(&of->all_types, 24); // LEAK
 
-    auto queued_name = copy_string("#Queued");
-    int queued_type_slot = array_append(&of->all_types, Type {
-        .tag = TYPE_QUEUED,
-        .name = queued_name,
-        .size_in_bytes = 0,
-        .metadata = nullptr,
-    });
-    assert(GEL_GENERIC_QUEUED_TYPE_SLOT == queued_type_slot);
-    table_append(&of->symbol_table, queued_name, {
-        .tag = DECL_TYPE,
-        .slot = queued_type_slot
-    });
-
     auto int_name = copy_string("int");
     table_append(&of->symbol_table, int_name, {
         .tag = DECL_TYPE,
@@ -640,20 +579,19 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
 
 
         Typing state = { .from_ast = code.ast };
-        
+
         table_init(&state.into.symbol_table); // LEAK
         array_init(&state.into.function_decls, top_level.func_decls.length); // LEAK
-        array_init(&state.into.variable_decls, top_level.var_decls.length); // LEAK
+        array_init(&state.into.variable_decls, top_level.independent_vars.length + top_level.dependent_vars.length); // LEAK
         array_init(&state.into.struct_decls, top_level.struct_decls.length); // LEAK
         array_init(&state.into.variant_decls, top_level.variant_decls.length); // LEAK
         array_init(&state.into.all_scopes, code.ast.length); // LEAK
-        array_init(&state.into.queue, 16); // LEAK
         bucket_array_init(&state.into.nested_expressions); // LEAK
         init_types(&state.into); // LEAK
 
         do_struct_declarations(&state, top_level.struct_decls);
         do_variant_declarations(&state, top_level.variant_decls);
-        do_variable_declarations(&state, top_level.var_decls);
+        do_variable_declarations(&state, top_level.independent_vars, top_level.dependent_vars);
         do_function_declarations(&state, top_level.func_decls);
 
 

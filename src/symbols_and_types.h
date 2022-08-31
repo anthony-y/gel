@@ -6,8 +6,6 @@
 #include "table.h"
 #include "ast.h"
 
-#define GEL_GENERIC_QUEUED_TYPE_SLOT 0
-
 using TypedFileHandle = int;
 using TypedExprHandle = int;
 using ScopeHandle = int;
@@ -25,8 +23,6 @@ enum TypedDeclTag {
     // However, this can also be used to access directly the type of e.g. SYMBOL_VARIABLE
     // without polluting the cache with the entire declaration.
     DECL_TYPE,
-
-    DECL_QUEUED_VAR,
 };
 
 struct TypedDeclHandle {
@@ -184,9 +180,6 @@ struct TypedFile {
     Array<Typed<FunctionDecl>> function_decls; // DECL_FUNCTION
     Array<Typed<VariableDecl>> variable_decls; // DECL_VARIABLE
     Array<Type> all_types;                     // DECL_TYPE (including queued types)
-    
-    Array<UntypedDecl<UntypedVar>> queue;      // DECL_QUEUED_VAR
-
 
     // These two are not mapped by the `symbol_table`
     //

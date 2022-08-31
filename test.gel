@@ -1,7 +1,7 @@
-const i int = j // depends j
-const j = 12 // depends none
+const i int = j
+const j = 12
 
-let arr [heap; int] // depends int
+let arr [heap; int]
 
 const d Pointer(Depends)
 

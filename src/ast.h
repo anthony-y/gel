@@ -124,7 +124,8 @@ struct UntypedStruct {
 };
 
 struct UntypedCode {
-    Array<UntypedDecl<UntypedVar>> var_decls;
+    Array<UntypedDecl<UntypedVar>> dependent_vars;
+    Array<UntypedDecl<UntypedVar>> independent_vars;
 
     Array<UntypedDecl<UntypedFunc>>    func_decls;
     Array<UntypedDecl<UntypedStruct>>  struct_decls;

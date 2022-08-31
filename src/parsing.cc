@@ -39,7 +39,8 @@ static bool match_token(Parsing *state, TokenType type) {
 }
 
 static void init_ast(UntypedCode *a) {
-    array_init(&a->var_decls, 16);
+    array_init(&a->independent_vars, 16);
+    array_init(&a->dependent_vars, 16);
     array_init(&a->func_decls, 16);
     array_init(&a->variant_decls, 16);
     array_init(&a->struct_decls, 16);
@@ -474,6 +475,27 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
     return {};
 }
 
+
+static bool is_expression_atomic(UntypedExpr e) {
+
+    if (e.tag == EXPR_NONE || e.tag == EXPR_INT_LITERAL || e.tag == EXPR_FLOAT_LITERAL || e.tag == EXPR_STRING_LITERAL)
+        return true;
+
+    switch (e.tag) {
+
+    case EXPR_PARENS: return is_expression_atomic(*e.parens);
+
+    case EXPR_UNARY: return is_expression_atomic(*e.unary.inner);
+
+    case EXPR_BINARY: return is_expression_atomic(*e.binary.left) && is_expression_atomic(*e.binary.right);
+
+    case EXPR_ARRAY_TYPE: assert(false); // todo consider
+
+    }
+
+    return false;
+}
+
 // TODO maybe remove is_const, and just have two separate arrays for let and const decls.
 static void parse_var_decl(Parsing *state, bool is_const) {
     
@@ -494,17 +516,22 @@ static void parse_var_decl(Parsing *state, bool is_const) {
             parser_error(state, "'%.*s' has no value (did you forget to delete the '='?)", name.length, name.data);
             return;
         }
+
         decl.data.expr = expr;
+
+        if (is_expression_atomic(expr)) {
+            match_token(state, SEMICOLON);
+            array_append(&temp_ptr_to_this_ast(state)->independent_vars, decl);
+            return;
+        }
     }
 
-    // TODO consider that this might be zero'd anyway
     else {
         decl.data.expr = UntypedExpr { .tag = EXPR_NONE };
     }
 
     match_token(state, SEMICOLON);
-
-    array_append(&temp_ptr_to_this_ast(state)->var_decls, decl);
+    array_append(&temp_ptr_to_this_ast(state)->dependent_vars, decl);
 }
 
 static UntypedIf parse_if(Parsing *state) {

@@ -83,6 +83,8 @@ int do_frontend(BucketArray<UntypedFile> *all_untyped_files, u8 *file_path) {
                 path[name.string_literal.length-2] = 0;
 
                 do_frontend(all_untyped_files, path);
+
+                free(path);
             }
         }
     }
@@ -103,7 +105,8 @@ static void deinit_untyped_files(Array<UntypedFile> *files) {
         for (int j = 0; j < ast.length; j++) {
             auto a = &ast[j];
             bucket_array_free(&a->nested_expressions);
-            array_free(&a->var_decls);
+            array_free(&a->dependent_vars);
+            array_free(&a->independent_vars);
             array_free(&a->func_decls);
             array_free(&a->all_statements);
             array_free(&a->top_directives);
@@ -118,28 +121,42 @@ static bool run_tests_for_table() {
     table_init(&t);
     Defer (table_free(&t));
     
+    
     table_append(&t, copy_string("One"), 1);
     Result<int> maybe_int = table_get(t, copy_string("One"));
+    //
     bool a = maybe_int.tag == Ok && maybe_int.ok == 1;
+
 
     table_append(&t, copy_string("One-hundred and twenty three"), 123);
     Result<int> maybe_123 = table_get(t, copy_string("One-hundred and twenty three"));
+    //
     bool b = maybe_123.tag == Ok && maybe_123.ok == 123;
+
 
     table_append(&t, copy_string("My string"), 314159);
     Result<int> hopefully_none = table_get(t, copy_string("My incorrect string"));
+    //
     bool c = hopefully_none.tag == Error && hopefully_none.error == true;
 
+
+    // costarrsing and liquid are a known collision in FNV-1a
     table_append(&t, copy_string("costarring"), 144);
     hopefully_none = table_get(t, copy_string("liquid"));
+    //
     bool d = hopefully_none.tag == Error && hopefully_none.error == true;
+
 
     table_append(&t, copy_string("liquid"), 244);
     Result<int> hopefully_244 = table_get(t, copy_string("liquid"));
+    //
     bool e = hopefully_244.tag == Ok && hopefully_244.ok == 244;
 
+
     Result<int> hopefully_144 = table_get(t, copy_string("costarring"));
+    //
     bool f = hopefully_144.tag == Ok && hopefully_144.ok == 144;
+
 
     return (a && b && c && d && e && f);
 }
