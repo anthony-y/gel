@@ -1,35 +1,3 @@
 const foo = bar
 const bar = "My string"
 const baz string = foo
-
-// Do name foo - has dependencies so we just add the name and queue the expression
-// Do name bar - no dependencies so we add the name and infer it's type
-// Do name baz - depends on foo so we add the name and queue it
-// Resolve all queued declarations
-
-// bar
-// baz
-// foo
-
-
-// for each var
-
-//     if no RHS dependencies
-
-//         (maybe resolve given typename)
-//         infer type
-//         apply types
-//         add name to table & create declaration
-
-//     else 
-
-//         (maybe resolve given typename)
-//         add name to table as queued decl
-//         queue for expression resolution
-//             Queued<VariableDecl>
-
-
-// for each queued in reverse
-
-//     infer expression type
-//     create declaration

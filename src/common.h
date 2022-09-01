@@ -21,3 +21,5 @@ struct Buffer {
 };
 
 using BufferView = Buffer;
+
+#define GEL_UNIMPLEMENTED 0

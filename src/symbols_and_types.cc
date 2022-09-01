@@ -5,17 +5,8 @@
 #include "ast.h"
 #include "defer.h"
 
-// (temp) printf
-#include <stdio.h>
-
+#include <stdio.h> // (temp) printf
 #include <string_view>
-
-//
-int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);
-//
-
-#define Error_Type()  (TypeHandle { .flags = 0, .slot = -1})
-#define Symbol_As_Type(the_slot) (TypeHandle { .flags = 0, .slot = the_slot})
 
 struct Typing {
     const Array<UntypedCode> from_ast;
@@ -23,6 +14,10 @@ struct Typing {
     ScopeHandle current_scope = 0;
 };
 
+#define Error_Type()  (TypeHandle { .flags = 0, .slot = -1})
+#define Symbol_As_Type(the_slot) (TypeHandle { .flags = 0, .slot = the_slot })
+
+int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);
 static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr of);
 
 static void push_scope(Typing *state) {
@@ -55,15 +50,18 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     switch (type_name.tag) {
 
-    case EXPR_NONE: return Error_Type();
+    case EXPR_NONE: assert(false);
 
-    case EXPR_BINARY: return Error_Type();
+    case EXPR_BINARY: assert(GEL_UNIMPLEMENTED);
 
-    case EXPR_FLOAT_LITERAL: return Error_Type();
+    case EXPR_ARRAY_TYPE: assert(GEL_UNIMPLEMENTED);
 
-    case EXPR_ARRAY_TYPE: return Error_Type();
+    case EXPR_FLOAT_LITERAL: {
+        fprintf(stderr, "gel: error: float literal was used as a type-name.\n");
+        return Error_Type();
+    } break;
 
-    // e.g.
+    // e.g:
     // #import("file")
     // ^
     //  ^^^^^^^^^^^^^^
@@ -76,7 +74,7 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
         return wrapped;
     } break;
 
-    // e.g.
+    // e.g:
     // let f Foo
     //       ^^^
     case EXPR_IDENTIFIER: {
@@ -85,12 +83,6 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
         Result<TypedDeclHandle> result = table_get(state->into.symbol_table, identifier);
 
         if (result.tag == Error) {
-
-            // Add a new type to the array, with placeholder data
-            // Add its handle to the symbol table
-            // Later, when we come across its declaration, we can just overwrite the type data.
-            // Just before we do semantic checking, we can iterate all the types and error if there are any placeholders left.
-
 
             // We'll insert a placeholder type with it's name.
             Type queued = {
@@ -111,6 +103,8 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
             return queued_handle;
         }
+
+        // Else, the identifier was found in the symbol table:
 
         TypedDeclHandle symbol_handle = result.ok;
 
@@ -150,7 +144,10 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     } break;
 
-    case EXPR_FUNCTION_CALL: { // e.g. Optional(int)
+    // e.g:
+    // Optional(int), type_of(foo)
+    //
+    case EXPR_FUNCTION_CALL: {
 
         auto call = type_name.function_call;
         
@@ -170,6 +167,9 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     } break;
 
+    // e.g:
+    // let bar *Foo
+    //
     case EXPR_UNARY: {
         auto inner = resolve_expression_as_typename(state, *type_name.unary.inner);
 
@@ -578,7 +578,6 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         do_variable_declarations(&state, top_level.dependent_vars);
 
         do_function_declarations(&state, top_level.func_decls);
-
 
         array_append(output, state.into);
     }
