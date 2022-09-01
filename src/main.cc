@@ -247,7 +247,7 @@ static Result<Buffer> read_entire_file(const u8 *path) {
 
 template<typename T> static void copy_to_flat_array_and_free_buckets(BucketArray<T> array, Array<T> *out_flat) {
     
-    array_init(out_flat, array.length * BucketArray<T>::BUCKET_MAX_ITEMS);
+    array_init(out_flat, array.count);
 
     auto next = array.first_bucket;
     while (next) {
