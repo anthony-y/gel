@@ -56,6 +56,7 @@ enum TypeHandleFlags : int {
     TYPE_HANDLE_IS_COMPILE_TIME = 0x1 << 0,
     TYPE_HANDLE_IS_POINTER = 0x1 << 1,
     TYPE_HANDLE_IS_POLYMORPHIC = 0x1 << 2,
+    TYPE_HANDLE_IS_ARRAY_VIEW = 0x1 << 3,
 };
 
 union TypeMetadata {
@@ -181,10 +182,12 @@ struct TypedFile {
     Array<Typed<VariableDecl>> variable_decls; // DECL_VARIABLE
     Array<Type> all_types;                     // DECL_TYPE (including queued types)
 
+
     // These two are not mapped by the `symbol_table`
     //
     Array<Scope> all_scopes; // indexed by ScopeHandle
     BucketArray<TypedExpr> nested_expressions; // allocator for sub-expressions
+
 };
 
 int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> *output);

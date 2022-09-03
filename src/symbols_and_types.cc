@@ -54,7 +54,19 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
 
     case EXPR_BINARY: assert(GEL_UNIMPLEMENTED);
 
-    case EXPR_ARRAY_TYPE: assert(GEL_UNIMPLEMENTED);
+    case EXPR_ARRAY_TYPE: {
+        assert(GEL_UNIMPLEMENTED);
+    } break;
+
+    case EXPR_ARRAY_VIEW: {
+        auto base_handle = resolve_expression_as_typename(state, *type_name.view_typename);
+
+        TypeHandle handle;
+        handle.flags = base_handle.flags | TYPE_HANDLE_IS_ARRAY_VIEW;
+        handle.slot = base_handle.slot;
+
+        return handle;
+    } break;
 
     case EXPR_FLOAT_LITERAL: {
         fprintf(stderr, "gel: error: float literal was used as a type-name.\n");
@@ -258,6 +270,8 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr expr) {
                 case DECL_STRUCT: {
                     return state->into.struct_decls[handle.slot].type_of;
                 } break;
+
+                default: assert(false);
             }
         }
 
