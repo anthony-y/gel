@@ -73,10 +73,12 @@ struct UntypedExpr {
         UntypedUnaryExpr unary;
         UntypedBinaryExpr binary;
         UntypedFunctionCallExpr function_call;
-        UntypedArrayViewExpr array_view;
-        UntypedArrayTypeExpr array_type;
 
-        UntypedExpr *view_typename;
+        UntypedArrayTypeExpr array_type; // e.g. [10; int], [heap; string]
+        UntypedExpr *view_typename; // e.g. [int], [string]
+
+        UntypedArrayViewExpr array_view;
+
         UntypedExpr *parens;
         UntypedExpr *directive;
 

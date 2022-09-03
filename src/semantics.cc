@@ -14,6 +14,9 @@ int ensure_code_is_semantically_correct(Array<TypedFile> code) {
         // If there is an initial value given to the declaration
         if (v.data.flags & VARIABLE_IS_INITED) {
 
+            if (v.type_of.slot == -1 || v.data.initial_value.type_of.slot == -1)
+                return -1;
+
             auto value_type = v.data.initial_value.type_of;
             auto given_type = v.type_of;
 

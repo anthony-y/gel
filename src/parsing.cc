@@ -389,8 +389,9 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
             };
         } break;
 
+        // Array or view type
         case LBRACKET: {
-            state->token++;
+            state->token++; // [
             auto tmp = parse_expression(state);
             auto size_or_typename = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, tmp);
 

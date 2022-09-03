@@ -58,7 +58,7 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
         assert(GEL_UNIMPLEMENTED);
     } break;
 
-    case EXPR_ARRAY_VIEW: {
+    case EXPR_VIEW_TYPE: {
         auto base_handle = resolve_expression_as_typename(state, *type_name.view_typename);
 
         TypeHandle handle;
@@ -242,12 +242,9 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr expr) {
 
         auto result = table_get(state->into.symbol_table, expr.identifier);
 
-        // TODO this should only apply at global scope.
-        //   at local scope, we should error immediately because things must be declared in order there.
         if (result.tag == Error) {
-
+            printf("gel: error: '%.*s' has not (yet) been declared.\n", expr.identifier.length, expr.identifier.data);
             return Error_Type();
-            
         }
 
         else {
