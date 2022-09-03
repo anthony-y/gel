@@ -72,6 +72,7 @@ enum TokenType : int {
     THEN,
     LOOP,
     WITH,
+    UNSAFE,
 
     TOKEN_TYPES_COUNT,
 };

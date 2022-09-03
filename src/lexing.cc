@@ -66,6 +66,7 @@ static TokenType compute_potential_keyword(u8 *start, int length) {
 
     case 6: {
         if (strncmp(start, "struct", 6) == 0) return STRUCT;
+        if (strncmp(start, "unsafe", 6) == 0) return UNSAFE;
     } break;
 
     case 7: {
