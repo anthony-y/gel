@@ -6,7 +6,18 @@
 
 #include <stdio.h>
 
+void ensure_scope_is_semantically_correct(Scope scope) {
+    for (int i = 0; i < scope.statements.length; i++) {
+        //
+    }
+}
+
 int ensure_code_is_semantically_correct(Array<TypedFile> code) {
+
+    for (int i = 0; i < code[0].function_decls.length; i++) {
+        auto f = code[0].function_decls[i].data;
+        ensure_scope_is_semantically_correct(code[0].all_scopes[f.scope_handle]);
+    }
 
     for (int i = 0; i < code[0].variable_decls.length; i++) {
         auto v = code[0].variable_decls[i];

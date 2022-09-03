@@ -302,7 +302,8 @@ static ScopeHandle apply_types_to_owned_block(Typing *state, UntypedBlockHandle 
     array_append(&state->into.all_scopes, resulting);
 
     for (int i = 0; i < block.all_statements.length; i++) {
-        auto s = block.all_statements.data[i];
+        UntypedExpr s = block.all_statements.data[i];
+        array_append(&resulting.statements, apply_type_to_expression(state, s));
     }
 
     /*
