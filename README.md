@@ -6,30 +6,42 @@ The compiler applies data-oriented design to maximise speed and simplify abstrac
 
 ## Project Status
 
-### Lexical analysis
+- [x] Lexical analysis
 
-Work in progress
+- [ ] Parsing
 
-### Parsing
+    - [x] Variable declarations
 
-Work in progress
+    - [x] Expressions
 
-### Typing and symbols
+    - [ ] Compound expressions (';' separated)
 
-Work in progress
+    - [ ] Function declarations
 
-### Semantic analysis
+        - [x] Basic signatures
 
-Work in progress
+        - [ ] Decorators
 
-### Bytecode generation
+    - [ ] Type names
 
-Planned
+        - [x] Primitives
 
-### Compile-time bytecode execution
+        - [x] Struct, variant names
 
-Planned
+        - [ ] Polymorphic types
 
-### C code generation
+        - [x] Arrays
 
-Planned
+    - [ ] Loops
+
+- [ ] Symbol and type table
+
+- [ ] Semantic analysis
+
+- [ ] Bytecode generation
+
+- [ ] Compile-time code execution
+
+- [ ] C backend
+
+- [ ] LLVM backend
