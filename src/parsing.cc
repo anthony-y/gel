@@ -588,6 +588,22 @@ static void parse_statement(Parsing *state) {
             });
             break;
 
+        case RETURN: {
+            state->token++;
+
+            auto e = parse_expression(state);
+            UntypedExpr *returned = nullptr;
+
+            if (e.tag != EXPR_NONE) {
+                returned = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, e);
+            }
+
+            array_append(&temp_ptr_to_this_ast(state)->all_statements, UntypedExpr {
+                .tag = EXPR_RETURN,
+                .return_expr = returned,
+            });
+        } break;
+
         default: {
             auto e = parse_expression(state);
             match_token(state, SEMICOLON);

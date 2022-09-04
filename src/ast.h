@@ -27,6 +27,7 @@ enum UntypedExprTag {
     EXPR_MATCHER,
     EXPR_PARENS,
     EXPR_USING,
+    EXPR_RETURN,
 };
 
 struct UntypedBinaryExpr {
@@ -81,6 +82,8 @@ struct UntypedExpr {
 
         UntypedExpr *parens;
         UntypedExpr *directive;
+
+        UntypedExpr *return_expr;
 
         UntypedMatch match_clause;
         UntypedIf if_clause;
