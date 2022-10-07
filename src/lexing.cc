@@ -37,6 +37,23 @@ static void skip_whitespace(Lexing *state) {
             while (*state->this_byte++ != '\n');
             match_next(state, '\n');
         }
+        else if (state->this_byte[0] == '/' && state->this_byte[1] == '*') {
+            state->this_byte += 2;
+            int depth = 1;
+            while (depth > 0) {
+                if (state->this_byte[0] == '/' && state->this_byte[1] == '*') {
+                    depth++;
+                    state->this_byte += 2;
+                }
+
+                if (state->this_byte[0] == '*' && state->this_byte[1] == '/') {
+                    depth--;
+                    state->this_byte += 2;
+                }
+
+                state->this_byte++;
+            }
+        }
         else break;
     }
 }
