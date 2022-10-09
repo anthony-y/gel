@@ -28,6 +28,8 @@ enum UntypedExprTag {
     EXPR_PARENS,
     EXPR_USING,
     EXPR_RETURN,
+    EXPR_COMPOUND,
+    EXPR_UNSAFE,
 };
 
 struct UntypedBinaryExpr {
@@ -68,6 +70,10 @@ struct UntypedIf {
     UntypedBlockHandle block_handle;
 };
 
+struct UntypedUnsafe {
+    UntypedExpr *child;
+};
+
 struct UntypedExpr {
     UntypedExprTag tag;
     union {
@@ -82,8 +88,8 @@ struct UntypedExpr {
 
         UntypedExpr *parens;
         UntypedExpr *directive;
-
         UntypedExpr *return_expr;
+        UntypedExpr *unsafe_child;
 
         UntypedMatch match_clause;
         UntypedIf if_clause;

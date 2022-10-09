@@ -89,6 +89,21 @@ static UntypedExpr parse_expression(Parsing *state) {
 
 static UntypedExpr parse_expression_list(Parsing *state) {
     UntypedExpr e = parse_assignment(state);
+
+    while (match_token(state, SEMICOLON)) {
+        auto right = parse_assignment(state);
+        if (right.tag == EXPR_NONE)
+            return right;
+
+        UntypedExpr a;
+        a.tag = EXPR_COMPOUND;
+        a.binary.left = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, e);
+        a.binary.right = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, right);
+        a.binary.op = SEMICOLON; // TODO here
+
+        e = a;
+    }
+
     return e;
 }
 
@@ -277,7 +292,6 @@ static UntypedExpr parse_division_module(Parsing *state) {
     return e;
 }
 
-// TODO: this may need to be of higher precedence.
 static UntypedExpr parse_selector(Parsing *state) {
     auto e = parse_postfix(state);
 
@@ -471,11 +485,18 @@ static UntypedExpr parse_simple_expression(Parsing *state) {
                 .float_literal = atof(now.start)
             };
         } break;
+
+        case UNSAFE: {
+            state->token++;
+            return UntypedExpr {
+                .tag = EXPR_UNSAFE,
+                .unsafe_child = bucket_array_append(&temp_ptr_to_this_ast(state)->nested_expressions, parse_expression(state))
+            };
+        } break;
     }
 
     return {};
 }
-
 
 static bool is_expression_atomic(UntypedExpr e) {
 
