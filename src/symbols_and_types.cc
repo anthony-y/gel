@@ -55,7 +55,15 @@ static TypeHandle resolve_expression_as_typename(Typing *state, UntypedExpr type
     case EXPR_BINARY: assert(GEL_UNIMPLEMENTED);
 
     case EXPR_ARRAY_TYPE: {
-        assert(GEL_UNIMPLEMENTED);
+
+        auto base_handle = resolve_expression_as_typename(state, *type_name.view_typename);
+
+        // TODO real array types with sizes and whatnot
+        TypeHandle handle;
+        handle.flags = base_handle.flags | TYPE_HANDLE_IS_COMPILE_TIME | TYPE_HANDLE_IS_ARRAY_VIEW;
+        handle.slot = base_handle.slot;
+
+        return handle;
     } break;
 
     case EXPR_VIEW_TYPE: {
@@ -267,6 +275,10 @@ static TypeHandle compute_type_of_expression(Typing *state, UntypedExpr expr) {
                 case DECL_STRUCT: {
                     return state->into.struct_decls[handle.slot].type_of;
                 } break;
+
+                case DECL_VARIANT: {
+                    return state->into.variant_decls[handle.slot].type_of;
+                }
 
                 default: assert(false);
             }
