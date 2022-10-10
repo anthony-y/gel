@@ -26,7 +26,6 @@ func c_string(from #string) -> [from.length+1; u8] { // depends from
 
     PushAllocator(temporary_allocator) // depends PushAllocator, temporary_allocator
 
-    // todo make it const
     match cstr = Allocate(from.length+1); unsafe { // depends Allocate, from, type_of(Allocate).return_type
         Ok(ptr)  => CopyRawBytes(from.length, from.data, ptr) // depends CopyBytes, from, cstr, ptr, raw
         Err(err) => panic(err) // depends none
