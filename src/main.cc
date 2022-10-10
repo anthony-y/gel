@@ -192,11 +192,13 @@ int main(int args_count, char *args[]) {
     Defer (array_free(&typed_files));
     int typing_status = apply_types_and_build_symbol_tables(flat_file_array, &typed_files);
     if (typing_status < 0) {
+        printf("gel: There were errors... exiting.\n");
         return 1;
     }
 
     int semantics_status = ensure_code_is_semantically_correct(typed_files);
     if (semantics_status < 0) {
+        printf("gel: There were errors... exiting.\n");
         return 1;
     }
 
