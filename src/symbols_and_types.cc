@@ -598,10 +598,10 @@ int apply_types_and_build_symbol_tables(Array<UntypedFile> to, Array<TypedFile> 
         do_struct_declarations(&state, top_level.struct_decls);
         do_variant_declarations(&state, top_level.variant_decls);
 
+        do_function_declarations(&state, top_level.func_decls);
+        
         do_variable_declarations(&state, top_level.independent_vars);
         do_variable_declarations(&state, top_level.dependent_vars);
-
-        do_function_declarations(&state, top_level.func_decls);
 
         array_append(output, state.into);
     }
