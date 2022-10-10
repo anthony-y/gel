@@ -91,7 +91,9 @@ static UntypedExpr parse_expression_list(Parsing *state) {
     UntypedExpr e = parse_assignment(state);
 
     while (match_token(state, SEMICOLON)) {
+
         auto right = parse_assignment(state);
+        
         if (right.tag == EXPR_NONE)
             return right;
 
